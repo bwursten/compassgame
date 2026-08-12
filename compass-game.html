@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Compass Game — Practice Before You Head Outside</title>
+
+<!--
+  ============================================================================
+  COMPASS GAME  —  single self-contained file. No libraries, no build step,
+  no browser storage. Works offline once loaded.
+
+  To embed in a page:
+      <iframe src="compass-game.html" title="Compass Game"
+              style="width:100%;height:1400px;border:0"
+              loading="lazy"></iframe>
+
+  Height matters: the page cannot resize its own iframe. The layout needs about
+  1250px, and the result panel adds roughly 150px more once a round finishes, so
+  1400px covers it. Err on the tall side — a too-short iframe gets its own
+  scrollbar. If your CMS supports an auto-resize script, that is nicer still.
+
+  A NOTE ON THE FRAME OF REFERENCE
+  Both views are drawn in the world frame: north is up and never moves.
+  The magnetic needle is therefore fixed, and the compass itself rotates
+  as the Scout turns — the same thing an observer standing nearby would
+  see. Because the map is also north-up, the travel arrow on the compass
+  and the travel arrow on the map always point the same way on screen.
+  ============================================================================
+-->
+
+<style>
+  :root{
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --navy:#12395c; --navy-2:#1c5180; --red:#ce1126; --gold:#f2a900;
+    --green:#1e7a3c; --tan:#f4efe4; --card:#fff; --ink:#20303d;
+    --muted:#5d6f7d; --line:#d8d2c4;
+    /* darker variants for text, where the bright versions fail contrast */
+    --red-ink:#8f1220; --green-ink:#14602e; --gold-ink:#8a6300;
+    --tap:44px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; padding:22px 14px 40px; background:var(--tan); color:var(--ink);
+    font:16px/1.55 var(--ui);
+  }
+  /* SVG labels inherit the page face instead of resolving their own stack */
+  #compass text,#field text{font-family:var(--ui)}
+  .wrap{max-width:1080px;margin:0 auto}
+
+  /* Two tiers of heading, used consistently:
+     section titles are sentence case; micro-labels are uppercase and tracked. */
+  h1{font-size:1.8rem;margin:0 0 6px;color:var(--navy);letter-spacing:-.01em}
+  h2{font-size:1.05rem;font-weight:700;color:var(--navy);margin:0 0 12px;
+     text-transform:none;letter-spacing:0}
+  p{margin:0 0 10px}
+  .lede{color:var(--muted);max-width:62ch;margin-bottom:18px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;
+         padding:16px;box-shadow:0 1px 2px rgba(20,40,60,.06)}
+
+  /* Settings lives out of the way at the top of the panel — a leader's control,
+     not something a Scout needs to walk the triangle. */
+  .panelBar{display:flex;justify-content:flex-end;margin-bottom:12px}
+
+  /* ---------------- stage: the two views, paired and centred ---------------- */
+  .stage{position:relative;display:block}
+  .view{position:relative;min-width:0}
+  .view svg{display:block;width:100%;height:auto;margin:0 auto}
+  #compass{touch-action:none}
+  #field{touch-action:pan-y}
+
+  /* Captions sit ABOVE each drawing rather than floating on top of it, so they
+     can never overlap the artwork or drift into a letterbox gutter. */
+  .viewHead{
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    margin:0 0 6px;padding:0 2px;
+    font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  }
+  .viewName{color:var(--muted)}
+  .viewNorth{color:var(--navy);white-space:nowrap}
+  .swapWrap{display:none;margin-top:10px}
+
+  /* Desktop: size both drawings by HEIGHT, so they come out exactly the same
+     height with no letterbox gutters, then centre the pair inside the panel.
+     Sizing by width instead lets the max-height cap bind, which pads the
+     drawing with dead space and is what made the compass look off-centre. */
+  @media (min-width:861px){
+    .stage{display:flex;align-items:center;justify-content:center;gap:24px}
+    .view{flex:0 1 auto}
+    .view svg{width:auto;height:clamp(260px,52vh,440px);max-width:100%}
+  }
+
+  /* ---------------- controls ---------------- */
+  .controls{margin-top:14px}
+  .ctl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:14px;margin-top:12px}
+  .ctl{border:1px solid var(--line);border-radius:10px;padding:12px}
+  .ctl-label{display:block;font-size:.78rem;font-weight:700;text-transform:uppercase;
+             letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+  .ctl-sub{display:block;font-size:.88rem;font-weight:500;color:var(--navy);margin-bottom:10px}
+  /* number and degree sign share one bordered box, so "255°" reads as a unit */
+  .numwrap{display:inline-flex;align-items:center;
+    border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 12px 0 6px}
+  .numwrap:focus-within{outline:3px solid var(--gold);outline-offset:1px}
+  .numwrap .deg{font-size:1.5rem;font-weight:700;color:var(--navy);line-height:1}
+  .bignum{
+    font-family:inherit;font-size:1.7rem;font-weight:700;color:var(--navy);
+    font-variant-numeric:tabular-nums;text-align:right;
+    width:3.2em;min-height:52px;padding:0;border:0;background:transparent;
+    appearance:textfield;-moz-appearance:textfield;
+  }
+  .bignum::-webkit-outer-spin-button,.bignum::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .bignum:focus{outline:none}
+  /* One row per control: the arrows bracket the number they change. Buttons
+     flex, the number box does not, so this holds together from a 360px phone
+     to a wide desktop without any width guesswork. */
+  .btn-row{display:flex;gap:8px;align-items:center}
+  .btn-row button{flex:1 1 0;min-width:0;font-size:.9rem;white-space:nowrap}
+  .btn-row .numwrap{flex:0 0 auto}
+  .btn-row .ar{height:1.3em}          /* no competing text, so give them room */
+
+  /* Arrows are drawn, not typed. The Unicode triangles render at very
+     different sizes across platforms and sometimes fall back to emoji. */
+  .sprite{position:absolute;width:0;height:0;overflow:hidden}
+  .ar{flex:0 0 auto;height:1.1em}
+  .ar.one{width:.79em}
+  .ar.two{width:1.49em}
+  .ar.flip{transform:scaleX(-1)}
+
+  button{
+    font:inherit;font-weight:600;cursor:pointer;color:var(--navy);
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    border:1px solid var(--navy);background:#fff;border-radius:9px;
+    min-height:var(--tap);padding:0 10px;
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  }
+  button:hover:not(:disabled){background:#eaf1f7}
+  button:active:not(:disabled){background:#dde8f1}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  button.primary{background:var(--navy);color:#fff;font-size:1.05rem;flex:1 1 auto;min-height:52px}
+  button.primary:hover:not(:disabled){background:var(--navy-2)}
+  button.ghost{border-color:var(--line);color:var(--muted);flex:0 0 auto}
+
+  input[type=number]:not(.bignum){font:inherit;font-variant-numeric:tabular-nums;text-align:center;
+    width:5em;min-height:var(--tap);padding:0 6px;border:1px solid var(--line);border-radius:9px;background:#fff}
+  select{font:inherit;min-height:var(--tap);padding:0 8px;border:1px solid var(--line);
+         border-radius:9px;background:#fff;width:100%}
+  label.chk{display:flex;align-items:center;gap:9px;font-size:.94rem;cursor:pointer;min-height:34px}
+  input[type=checkbox]{width:20px;height:20px;accent-color:var(--navy);flex:0 0 auto}
+  /* one focus treatment for everything focusable */
+  select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{
+    outline:3px solid var(--gold);outline-offset:2px}
+
+  .status{display:flex;align-items:center;gap:9px;justify-content:center;font-weight:600;
+          font-size:.94rem;border-radius:9px;padding:11px 12px;margin-top:12px}
+  .status.no{background:#fdeef0;color:var(--red-ink)}
+  .status.yes{background:#e8f5ec;color:var(--green-ink)}
+  .dot{width:10px;height:10px;border-radius:99px;background:currentColor;flex:0 0 auto}
+
+  .step{background:#f6f3ea;border-left:4px solid var(--gold);border-radius:0 9px 9px 0;padding:11px 14px}
+  .step b{color:var(--navy)}
+  .step .math{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy)}
+  .warn{color:var(--red-ink);font-size:.89rem;margin-top:6px}
+  .hint{font-size:.82rem;color:var(--muted);text-align:center;max-width:56ch;margin:10px auto 0}
+
+  .actions{display:flex;gap:8px;margin-top:12px}
+
+  .result{margin-top:12px;border-radius:10px;padding:14px 16px;display:none}
+  .result.show{display:block}
+  .result .score{font-size:1.45rem;font-weight:800;margin-bottom:4px}
+  .result.rank-a{background:#e8f5ec;border:1px solid #a9d9bb} .result.rank-a .score{color:var(--green-ink)}
+  .result.rank-b{background:#fff8e6;border:1px solid #e8d79a} .result.rank-b .score{color:var(--gold-ink)}
+  .result.rank-c{background:#fdeef0;border:1px solid #edbfc6} .result.rank-c .score{color:var(--red-ink)}
+  .recap{font-size:.9rem;margin-top:8px;color:var(--muted)}
+  .recap table{border-collapse:collapse;margin-top:6px;font-variant-numeric:tabular-nums}
+  .recap td{padding:2px 12px 2px 0}
+
+  .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .field-note{font-size:.82rem;color:var(--muted);margin-top:5px}
+
+  /* ---------------- settings modal ---------------- */
+  /* A closed <dialog> is display:none by default, so this is invisible and
+     unreachable by keyboard until showModal() is called. */
+  dialog.modal{border:0;padding:0;background:transparent;
+    width:100%;max-width:min(680px,92vw);max-height:90vh;overflow:auto}
+  dialog.modal::backdrop{background:rgba(18,57,92,.5)}
+  .modalInner{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:16px;box-shadow:0 14px 44px rgba(20,40,60,.3)}
+  .modalHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .modalHead h2{margin:0}
+  .iconBtn{min-width:var(--tap);padding:0;font-size:1.5rem;line-height:1;
+    border-color:var(--line);color:var(--muted);flex:0 0 auto}
+  .modalFoot{display:flex;justify-content:flex-end;margin-top:16px}
+  .modalFoot button{min-width:130px;flex:0 0 auto}
+
+  footer{margin-top:20px;font-size:.82rem;color:var(--muted);text-align:center}
+
+  /* ================= PHONE / NARROW ================= */
+  @media (max-width:860px){
+    body{padding:16px 10px 30px}
+    h1{font-size:1.5rem}
+    .panel{padding:12px;border-radius:12px}
+
+    .view.big svg{max-height:clamp(230px,44vh,460px)}
+    .view.small{
+      position:absolute;top:6px;right:6px;z-index:3;
+      width:min(44%,168px);padding:4px;
+      background:rgba(255,255,255,.95);border:1px solid var(--line);
+      border-radius:10px;box-shadow:0 3px 10px rgba(20,40,60,.2);
+    }
+    .view.small svg{max-height:none}
+    .view.small .viewHead{display:none}
+    /* an inset is too small for numerals — keep only what shows alignment */
+    .view.small .dialNums,.view.small .plateScale{display:none}
+    .view.small .cardinal{font-size:24px}
+    /* footprints, landmarks and stick trimmings turn to mush at inset size */
+    .view.small .fieldChrome,.view.small .fieldDetail{display:none}
+    .view.small #compass{touch-action:pan-y}
+
+    .swapWrap{display:block}
+    .swapWrap button{width:100%}
+    .ctl-grid{grid-template-columns:1fr}
+    .settings-grid{grid-template-columns:1fr}
+
+    .actions{
+      position:sticky;bottom:0;z-index:4;padding:10px 0 6px;margin-top:10px;
+      background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%);
+    }
+  }
+  @media (max-width:430px){
+    .btn-row{gap:6px}
+    .btn-row button{padding:0 4px}
+    .bignum{width:2.7em;font-size:1.45rem}
+    .numwrap{padding:0 9px 0 5px}
+    .numwrap .deg{font-size:1.25rem}
+  }
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- arrow glyphs, referenced by the nudge buttons -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="tri1" viewBox="0 0 10 14"><path d="M8.5,1 L1,7 L8.5,13 Z" fill="currentColor"/></symbol>
+  <symbol id="tri2" viewBox="0 0 19 14"><path d="M8.5,1 L1,7 L8.5,13 Z M18,1 L10.5,7 L18,13 Z" fill="currentColor"/></symbol>
+</svg>
+
+<div class="wrap">
+
+  <!-- INTRO — safe to delete this whole block if the page around it already
+       carries a heading and an explanation. Nothing else depends on it. -->
+  <h1>Compass Game</h1>
+  <p class="lede">
+    Three legs of 100 feet, each one 120&deg; from the last &mdash; and if you do it right, you finish
+    standing next to the stick you started at. Practice here first, then go do it for real.
+  </p>
+  <!-- END INTRO -->
+
+  <section class="panel">
+    <div class="panelBar">
+      <button class="ghost" id="settingsBtn" type="button" aria-haspopup="dialog">Settings</button>
+    </div>
+
+    <!-- ============ STAGE ============ -->
+    <div class="stage" id="stage">
+      <div class="view v-compass" id="vCompass">
+        <div class="viewHead">
+          <span class="viewName">Your compass</span>
+          <span class="viewNorth">&uarr; North</span>
+        </div>
+        <svg id="compass" viewBox="-125 -125 250 250" role="img"
+             aria-label="Baseplate compass seen from above. North stays fixed at the top of the screen; the compass turns as you turn."></svg>
+      </div>
+      <div class="view v-field" id="vField">
+        <div class="viewHead">
+          <span class="viewName">The field from above</span>
+          <span class="viewNorth">&uarr; North</span>
+        </div>
+        <svg id="field" viewBox="-138 -140 276 280" role="img"
+             aria-label="Top-down view of the field showing your starting stick and the path you have walked."></svg>
+      </div>
+    </div>
+
+    <div class="swapWrap">
+      <button id="swapBtn" type="button">Make the compass bigger</button>
+    </div>
+    <p class="hint" id="dragHint"></p>
+
+    <!-- ============ CONTROLS ============ -->
+    <div class="controls">
+      <div class="step" id="stepBox" aria-live="polite"></div>
+
+      <div class="ctl-grid">
+        <div class="ctl">
+          <span class="ctl-label">Step 1 &middot; Turn the dial to your desired bearing</span>
+          <span class="ctl-sub">Just the numbered ring turns &mdash; you stay facing the same way.</span>
+          <div class="btn-row">
+            <button type="button" data-dial="-10" title="10&deg; lower" aria-label="Turn the dial 10 degrees lower"><svg class="ar two"><use href="#tri2"/></svg></button>
+            <button type="button" data-dial="-1" title="1&deg; lower" aria-label="Turn the dial 1 degree lower"><svg class="ar one"><use href="#tri1"/></svg></button>
+            <span class="numwrap">
+              <input type="number" class="bignum" id="dialInput" inputmode="numeric"
+                     min="0" max="359" step="1" value="15" aria-label="Bearing on the dial, in degrees">
+              <span class="deg">&deg;</span>
+            </span>
+            <button type="button" data-dial="1" title="1&deg; higher" aria-label="Turn the dial 1 degree higher"><svg class="ar one flip"><use href="#tri1"/></svg></button>
+            <button type="button" data-dial="10" title="10&deg; higher" aria-label="Turn the dial 10 degrees higher"><svg class="ar two flip"><use href="#tri2"/></svg></button>
+          </div>
+        </div>
+
+        <div class="ctl">
+          <span class="ctl-label">Step 2 &middot; Turn yourself until the needle lines up</span>
+          <span class="ctl-sub">Put red in the shed. Turn the whole compass but keep the bearing set.</span>
+          <div class="btn-row">
+            <button type="button" data-face="-10" title="10&deg; left" aria-label="Turn yourself 10 degrees left"><svg class="ar two"><use href="#tri2"/></svg></button>
+            <button type="button" data-face="-1" title="1&deg; left" aria-label="Turn yourself 1 degree left"><svg class="ar one"><use href="#tri1"/></svg></button>
+            <span class="numwrap" id="faceOutRow">
+              <input type="number" class="bignum" id="faceInput" inputmode="numeric"
+                     min="0" max="359" step="1" value="0" aria-label="Direction you are facing, in degrees">
+              <span class="deg">&deg;</span>
+            </span>
+            <button type="button" data-face="1" title="1&deg; right" aria-label="Turn yourself 1 degree right"><svg class="ar one flip"><use href="#tri1"/></svg></button>
+            <button type="button" data-face="10" title="10&deg; right" aria-label="Turn yourself 10 degrees right"><svg class="ar two flip"><use href="#tri2"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="status no" id="alignStatus" aria-live="polite">
+        <span class="dot"></span><span>Turn yourself 15° right — leave the dial alone</span>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="walkBtn" type="button">Walk 100 feet</button>
+        <button class="ghost" id="resetBtn" type="button">Start over</button>
+      </div>
+
+      <div class="result" id="result" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <footer>Built for compass practice &mdash; no substitute for grass under your boots.</footer>
+</div>
+
+<!-- ============ SETTINGS (hidden until the Settings button is pressed) ============
+     A native <dialog> is used deliberately: the browser gives us the focus trap,
+     Escape to close, the backdrop, and focus returning to the Settings button
+     afterwards — none of which is worth hand-rolling. It is display:none until
+     showModal() runs, so nothing here is visible or focusable on load.
+     The wrapper is <form method="dialog"> so any button inside closes it. -->
+<dialog class="modal" id="settingsModal" aria-labelledby="settingsTitle">
+  <form method="dialog" class="modalInner">
+    <div class="modalHead">
+      <h2 id="settingsTitle">Settings</h2>
+      <button class="iconBtn" value="close" aria-label="Close settings">&times;</button>
+    </div>
+
+    <div class="settings-grid">
+      <div class="ctl">
+        <span class="ctl-label">How steady are your hands?</span>
+        <input type="range" id="sloppy" min="0" max="3" step="1" value="2" style="width:100%;height:var(--tap)">
+        <div class="field-note" id="sloppyNote"></div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Number of legs</span>
+        <select id="legsSel">
+          <option value="3" selected>3 legs, turn 120&deg; (the classic)</option>
+          <option value="4">4 legs, turn 90&deg;</option>
+          <option value="5">5 legs, turn 72&deg;</option>
+          <option value="6">6 legs, turn 60&deg;</option>
+        </select>
+        <div class="field-note">Changing this starts a fresh round.</div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Helpers</span>
+        <label class="chk"><input type="checkbox" id="showFace" checked> Show the degrees I'm facing</label>
+        <label class="chk"><input type="checkbox" id="showMath" checked> Show me the bearing math</label>
+      </div>
+    </div>
+
+    <div class="modalFoot">
+      <button class="primary" value="close">Done</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+/* ============================================================================
+   COMPASS GAME
+
+   FRAME OF REFERENCE — this drives the whole drawing.
+   Everything is drawn in the world frame: north is up and never moves.
+     * The magnetic needle is static, pointing straight up.
+     * The baseplate rotates by  +facing,  so its direction-of-travel arrow
+       points where the Scout is walking.
+     * The housing sits inside the baseplate and rotates by  -dial,  so the
+       number dialled in ends up under the index line.
+   The orienting arrow therefore sits at world angle (facing - dial), and it
+   lands on the needle exactly when facing == dial. Same alignment rule as
+   before, but now it is north that holds still and the compass that turns —
+   which is what a bystander watching the Scout would actually see, and it
+   means the travel arrow here points the same way as the one on the map.
+
+   World coordinates: x = east, y = north, in feet. SVG y is flipped.
+   Bearings: degrees clockwise from north.
+   ============================================================================ */
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}) => { const n = document.createElementNS(SVGNS, t); for (const k in a) n.setAttribute(k, a[k]); return n; };
+const $ = id => document.getElementById(id);
+const norm = a => ((a % 360) + 360) % 360;
+const angDiff = (a, b) => { const d = Math.abs(norm(a) - norm(b)); return d > 180 ? 360 - d : d; };
+const rad = d => d * Math.PI / 180;
+const randn = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+const mq = q => window.matchMedia ? window.matchMedia(q)
+  : { matches: false, media: q, addEventListener() {}, addListener() {} };
+const NARROW = mq("(max-width:860px)");
+const REDUCED = mq("(prefers-reduced-motion:reduce)");
+
+const SLOPPY = [
+  { scale: 0,   name: "Perfect robot", note: "No error at all. Good for learning the pattern." },
+  { scale: 0.5, name: "Very careful",  note: "Tiny wobble, the way a patient Scout sights a landmark." },
+  { scale: 1,   name: "Realistic",     note: "About what a good Scout does on a real field. Recommended." },
+  { scale: 2,   name: "In a hurry",    note: "Rushed sighting and rushed pacing. Expect to miss." }
+];
+const LEG_FT = 100;
+const PRINT_FT = 10;     // one footprint per 10 feet — they double as a ruler
+const ALIGN_TOL = 3;
+const DEG_PER_PX = 1 / 3;
+const TAP_SLOP = 8;
+
+/* Compass geometry, in SVG user units. A compact rectangular baseplate, like a
+   real one: capsule nearly filling the plate width, straight-edge scales down
+   both long edges, small corner radius, lanyard hole at the foot.
+
+   The plate rotates, so it has to fit inside a circle as wide as its own
+   diagonal. For a rounded rectangle that envelope is
+       hypot(W/2 - r, H/2 - r) + r
+   which here comes to about 117, comfortably inside the 125-unit viewBox
+   half-extent. Keep those in step if you change the plate — the test suite
+   checks it, and note the dial size depends only on `bezel`, not on the
+   plate, so the plate can breathe without costing any dial. */
+const C = {
+  plateW: 162, plateH: 178, plateR: 10,
+  bezel: 68, face: 61, labelR: 44,
+  needle: 32, orientTip: 38,
+  dotTip: -86, dotBase: -75, dotFoot: -61
+};
+
+/* Scenery. These exist to give the field some visual interest and a sense of
+   scale — nothing more. Deliberately NOT wired to anything: the objective is
+   following bearings back to the stick, and a landmark that lit up or got named
+   would start to read as a destination, which is the wrong idea to plant.
+   Positions are fixed, spread right round the compass so the field stays
+   balanced, and all beyond 110 ft — further out than the walk can ever reach,
+   so they never collide with the trail. */
+const LANDMARKS = [
+  { b: 20,  r: 115, kind: "tree" },
+  { b: 70,  r: 120, kind: "boulder" },
+  { b: 115, r: 118, kind: "post" },
+  { b: 160, r: 112, kind: "bush" },
+  { b: 205, r: 120, kind: "tree" },
+  { b: 250, r: 115, kind: "post" },
+  { b: 295, r: 122, kind: "boulder" },
+  { b: 340, r: 112, kind: "bush" }
+].map(L => ({ ...L, x: L.r * Math.sin(rad(L.b)), y: L.r * Math.cos(rad(L.b)) }));
+
+const S = {
+  legs: 3, turn: 120,
+  leg: 0,
+  dial: 15,
+  facing: 0,              // float, so slow swipes accumulate
+  pos: { x: 0, y: 0 },
+  trail: [{ x: 0, y: 0 }],
+  used: [],
+  sloppyIdx: 2,
+  showFace: true, showMath: true,
+  bigView: "field",
+  animating: false, finished: false
+};
+
+const expectedBearing = () => S.leg === 0 ? null : norm(S.used[S.leg - 1] + S.turn);
+const aligned = () => angDiff(S.facing, S.dial) <= ALIGN_TOL;
+const faceDeg = () => norm(Math.round(S.facing));
+
+/* ============================================================================
+   COMPASS
+   ============================================================================ */
+const cSvg = $("compass");
+let gBase, gHousing, orientArrow;
+
+function buildCompass() {
+  cSvg.textContent = "";
+
+  // A surface behind the compass, matching the field's, so the two views read
+  // as a matched pair and their captions line up with a visible edge. It does
+  // not rotate — only the compass on top of it does.
+  cSvg.appendChild(el("rect", { x: -125, y: -125, width: 250, height: 250, rx: 10, fill: "#f7f4ed" }));
+
+  // everything that turns with the Scout
+  gBase = el("g", { class: "plate" });
+  cSvg.appendChild(gBase);
+
+  const hw = C.plateW / 2, hh = C.plateH / 2;
+  gBase.appendChild(el("rect", { x: -hw, y: -hh, width: C.plateW, height: C.plateH,
+    rx: C.plateR, fill: "#e8eff5", "fill-opacity": .9, stroke: "#8fa3b3", "stroke-width": 2 }));
+  gBase.appendChild(el("rect", { x: -hw + 6, y: -hh + 6, width: C.plateW - 12, height: C.plateH - 12,
+    rx: C.plateR - 4, fill: "none", stroke: "#c3d2dd", "stroke-width": 1 }));
+
+  // straight-edge scales down both long edges — millimetres on the left,
+  // coarser inch marks on the right, the way a real baseplate is printed
+  const scales = el("g", { stroke: "#6b7f8e", "stroke-width": 1, class: "plateScale" });
+  for (let y = -74, i = 0; y <= 62; y += 8, i++) {
+    scales.appendChild(el("line", { x1: -hw + 3, y1: y, x2: -hw + (i % 5 === 0 ? 11 : 7), y2: y }));
+  }
+  for (let y = -72; y <= 58; y += 19) {
+    scales.appendChild(el("line", { x1: hw - 3, y1: y, x2: hw - 11, y2: y }));
+  }
+  gBase.appendChild(scales);
+
+  // lanyard hole at the foot of the plate
+  gBase.appendChild(el("circle", { cx: 0, cy: hh - 14, r: 5,
+    fill: "#fbfdff", stroke: "#8fa3b3", "stroke-width": 1.5, class: "plateScale" }));
+
+  // ---- the rotating housing ----
+  gHousing = el("g", { class: "housing" });
+  gBase.appendChild(gHousing);
+
+  gHousing.appendChild(el("circle", { r: C.bezel, fill: "#3c4a55" }));
+  for (let a = 0; a < 360; a += 10) {
+    const g = el("g", { transform: `rotate(${a})` });
+    g.appendChild(el("rect", { x: -1.6, y: -C.bezel, width: 3.2, height: C.bezel - C.face, fill: "#8b98a3" }));
+    gHousing.appendChild(g);
+  }
+  gHousing.appendChild(el("circle", { r: C.face, fill: "#fbfaf6", stroke: "#2b3742", "stroke-width": 1.5 }));
+
+  for (let a = 0; a < 360; a += 2) {
+    const major = a % 30 === 0, mid = a % 10 === 0;
+    const g = el("g", { transform: `rotate(${a})`, class: major || mid ? "" : "dialNums" });
+    g.appendChild(el("line", { x1: 0, y1: -C.face, x2: 0, y2: -C.face + (major ? 10 : mid ? 6 : 3),
+      stroke: major ? "#2b3742" : "#7b8892", "stroke-width": major ? 2 : 1 }));
+    gHousing.appendChild(g);
+  }
+
+  const cardinals = { 0: "N", 90: "E", 180: "S", 270: "W" };
+  for (let a = 0; a < 360; a += 30) {
+    const isC = a in cardinals;
+    const g = el("g", { transform: `rotate(${a}) translate(0,${-C.labelR}) rotate(${-a})`,
+      class: isC ? "" : "dialNums" });
+    const t = el("text", { "text-anchor": "middle", "dominant-baseline": "central",
+      class: isC ? "cardinal" : "",
+      "font-size": isC ? "18" : "12.5", "font-weight": isC ? "800" : "600",
+      fill: a === 0 ? "#ce1126" : isC ? "#12395c" : "#5d6f7d" });
+    t.textContent = isC ? cardinals[a] : String(a);
+    g.appendChild(t);
+    gHousing.appendChild(g);
+  }
+
+  // the shed: put red in it
+  // The shed is deliberately wider than the needle (±8.5 against the needle's
+  // ±5) so the needle nests *inside* it with visible margin. That is what makes
+  // "red in the shed" literal, and it leaves room for the fill to show through.
+  orientArrow = el("path", {
+    d: `M 0,${-C.orientTip} L 14,-21 L 8.5,-21 L 8.5,28 L -8.5,28 L -8.5,-21 L -14,-21 Z`,
+    fill: "none", stroke: "#ce1126", "stroke-width": 2.4, "stroke-linejoin": "round" });
+  gHousing.appendChild(orientArrow);
+  const orientLines = el("g", { stroke: "#ce1126", "stroke-width": 1, opacity: .45, class: "dialNums" });
+  [-18, 18].forEach(x => orientLines.appendChild(el("line", { x1: x, y1: -12, x2: x, y2: 30 })));
+  gHousing.appendChild(orientLines);
+
+  // ---- direction of travel: drawn last so its shaft crosses the bezel and
+  //      doubles as the index line you read the bearing against ----
+  const dot = el("g", { fill: "#ce1126" });
+  dot.appendChild(el("polygon", { points: `0,${C.dotTip} 10,${C.dotBase} -10,${C.dotBase}` }));
+  dot.appendChild(el("rect", { x: -3.5, y: C.dotBase, width: 7, height: C.dotFoot - C.dotBase }));
+  gBase.appendChild(dot);
+
+  // ---- the needle: north never moves, so neither does this ----
+  const gNeedle = el("g");
+  gNeedle.appendChild(el("polygon", { points: `0,${-C.needle} 5,0 -5,0`, fill: "#ce1126" }));
+  gNeedle.appendChild(el("polygon", { points: `0,${C.needle} 5,0 -5,0`, fill: "#f4f4f0",
+    stroke: "#6b7883", "stroke-width": 1.2 }));
+  gNeedle.appendChild(el("circle", { r: 3, fill: "#2b3742" }));
+  cSvg.appendChild(gNeedle);
+}
+
+function drawCompass() {
+  gBase.setAttribute("transform", `rotate(${S.facing.toFixed(2)})`);
+  gHousing.setAttribute("transform", `rotate(${-S.dial})`);
+  // "Red in the shed" — so the shed stays red at all times. Alignment shows as
+  // the shed lighting up and its outline thickening: two cues, neither of which
+  // depends on telling red from green.
+  const ok = aligned();
+  orientArrow.setAttribute("fill", ok ? "#f2a900" : "none");
+  orientArrow.setAttribute("fill-opacity", ok ? ".45" : "0");
+  orientArrow.setAttribute("stroke-width", ok ? 3.6 : 2.4);
+}
+
+/* ============================================================================
+   FIELD
+   Static furniture is built once. During the walk only the trail points and
+   the walker's transform change, so a frame costs two attribute writes.
+   ============================================================================ */
+const fSvg = $("field");
+let gIdeal, gPrints, gTrailLine, gDots, gClose, gYou, gYouArrow, gPreview;
+let printCount = 0;
+
+/* One footprint: toes and heel, drawn pointing north so a rotate() aims it.
+   Fill is inherited from the enclosing leg group. */
+function makePrint() {
+  const g = el("g");
+  g.appendChild(el("ellipse", { cx: 0, cy: -1.4, rx: 1.8, ry: 2.6 }));
+  g.appendChild(el("ellipse", { cx: 0, cy: 2.6, rx: 1.3, ry: 1.7 }));
+  return g;
+}
+
+/* Stamp one print `s` feet along a leg, stepping left and right of the line. */
+function addPrint(group, from, heading, s) {
+  const h = rad(heading), ax = Math.sin(h), ay = Math.cos(h);
+  const side = (printCount++ % 2) ? 1 : -1;
+  const px = from.x + ax * s + ay * 2.4 * side;   // perpendicular is (ay, -ax)
+  const py = from.y + ay * s - ax * 2.4 * side;
+  const g = makePrint();
+  g.setAttribute("transform",
+    `translate(${px.toFixed(2)},${(-py).toFixed(2)}) rotate(${heading.toFixed(1)})`);
+  group.appendChild(g);
+}
+
+/* Landmarks seen from directly above. One light source, upper left, so every
+   shadow falls the same way — cheap offset ellipses rather than blur filters,
+   which get slow on inexpensive Android hardware. */
+function drawLandmark(L) {
+  const g = el("g", { transform: `translate(${L.x.toFixed(1)},${(-L.y).toFixed(1)})` });
+  const sr = L.kind === "tree" ? 9 : L.kind === "boulder" ? 7 : L.kind === "bush" ? 5 : 4.6;
+  g.appendChild(el("ellipse", { cx: sr * .32, cy: sr * .4, rx: sr * .95, ry: sr * .44,
+    fill: "#28371e", opacity: .15 }));
+
+  if (L.kind === "tree") {
+    [[0, -2, 8.6], [-5, 2, 5.4], [5, 2, 5], [0, 5, 4.4]].forEach(([x, y, r]) =>
+      g.appendChild(el("circle", { cx: x, cy: y, r, fill: "#4f7a3f" })));
+    g.appendChild(el("circle", { cx: -1.5, cy: -2, r: 4.4, fill: "#5f8f4b" }));
+    g.appendChild(el("circle", { cx: 0, cy: 1.5, r: 1.5, fill: "#6b4a2a" }));
+  } else if (L.kind === "boulder") {
+    g.appendChild(el("polygon", { points: "-7,1 -4.5,-5.5 3,-7 7,-1.5 4,5 -3,6",
+      fill: "#9aa3a8", stroke: "#7b858b", "stroke-width": 1 }));
+    g.appendChild(el("polygon", { points: "-4.5,-5.5 3,-7 1.5,-2 -3,-1", fill: "#b6bec2" }));
+  } else if (L.kind === "bush") {
+    [[-3.4, 1, 4.1], [3.4, 1.6, 3.7], [0, -2.4, 4.5]].forEach(([x, y, r]) =>
+      g.appendChild(el("circle", { cx: x, cy: y, r, fill: "#6d9455" })));
+    g.appendChild(el("circle", { cx: -1, cy: -1.2, r: 2.5, fill: "#82ac67" }));
+  } else {
+    g.appendChild(el("circle", { r: 4.4, fill: "#8a6a45", stroke: "#6b4f31", "stroke-width": 1 }));
+    g.appendChild(el("circle", { r: 2.2, fill: "none", stroke: "#6b4f31", "stroke-width": .9 }));
+  }
+  return g;
+}
+
+function buildField() {
+  fSvg.textContent = "";
+  fSvg.appendChild(el("rect", { x: -138, y: -140, width: 276, height: 280, rx: 10, fill: "#eef4e8" }));
+
+  const grid = el("g", { stroke: "#cfdcc4", "stroke-width": .7 });
+  for (let v = -125; v <= 125; v += 25) {
+    grid.appendChild(el("line", { x1: v, y1: -130, x2: v, y2: 130 }));
+    grid.appendChild(el("line", { x1: -130, y1: v, x2: 130, y2: v }));
+  }
+  fSvg.appendChild(grid);
+
+  // landmarks sit under the trail, so the path always reads on top of them
+  const marks = el("g", { class: "fieldDetail" });
+  LANDMARKS.forEach(L => marks.appendChild(drawLandmark(L)));
+  fSvg.appendChild(marks);
+
+  gIdeal = el("g"); fSvg.appendChild(gIdeal);
+  gPrints = el("g", { class: "fieldDetail" }); fSvg.appendChild(gPrints);
+  gTrailLine = el("polyline", { points: "0,0", fill: "none", stroke: "#12395c",
+    "stroke-width": 3.4, "stroke-linejoin": "round", "stroke-linecap": "round" });
+  fSvg.appendChild(gTrailLine);
+  gClose = el("g"); fSvg.appendChild(gClose);
+  gDots = el("g"); fSvg.appendChild(gDots);
+
+  // the stick you planted, flagged with a bandana the way a Scout would
+  const stick = el("g");
+  stick.appendChild(el("ellipse", { cx: 3.4, cy: 2, rx: 6.5, ry: 2.8,
+    fill: "#28371e", opacity: .16, class: "fieldDetail" }));
+  stick.appendChild(el("circle", { r: 5.5, fill: "none", stroke: "#a8825c",
+    "stroke-width": 1.2, "stroke-dasharray": "3 2.5" }));
+  const tuft = el("g", { stroke: "#4f6b3f", "stroke-width": 1.1,
+    "stroke-linecap": "round", class: "fieldDetail" });
+  [[-4.5, 1, -6.2, -4], [-2, 1.5, -2.6, -5.4], [2.6, 1.5, 3.6, -4.8], [4.8, 1, 6.6, -3]]
+    .forEach(([x1, y1, x2, y2]) => tuft.appendChild(el("line", { x1, y1, x2, y2 })));
+  stick.appendChild(tuft);
+  // Tapered and leaning. The pale outline keeps it legible when a leg of the
+  // trail happens to run right underneath it.
+  stick.appendChild(el("polygon", {
+    points: "1.23,-0.41 -1.23,0.41 -7.57,-20.81 -6.43,-21.19",
+    fill: "#8a5a2b", stroke: "#f2ead9", "stroke-width": .8 }));
+  const flag = el("g", { class: "fieldDetail" });
+  // a swallowtail, not a triangle: a plain triangle in the same red reads as a
+  // second direction arrow, which is exactly the wrong idea to plant
+  flag.appendChild(el("polygon", {
+    points: "-7.6,-22.4 -15.8,-25 -12.4,-21.2 -15,-17.6 -7.6,-18",
+    fill: "#ce1126" }));
+  flag.appendChild(el("circle", { cx: -7, cy: -20.4, r: 1.9, fill: "#a50e1f" }));
+  stick.appendChild(flag);
+  const st = el("text", { x: 9, y: 12, "text-anchor": "start", fill: "#8a5a2b",
+    "font-size": "9", "font-weight": "700", class: "fieldChrome" });
+  st.textContent = "START";
+  stick.appendChild(st);
+  // NB appended after the Scout below, so the stick is never buried under them
+
+  // you, with the travel arrow and a dashed preview of the whole leg ahead
+  gYou = el("g");
+  gYouArrow = el("g");
+  gPreview = el("line", { x1: 0, y1: -44, x2: 0, y2: -LEG_FT, stroke: "#ce1126",
+    "stroke-width": 1.6, "stroke-dasharray": "5 4", opacity: .38 });
+  gYouArrow.appendChild(gPreview);
+  gYouArrow.appendChild(el("line", { x1: 0, y1: 0, x2: 0, y2: -34, stroke: "#ce1126", "stroke-width": 2.4 }));
+  gYouArrow.appendChild(el("polygon", { points: "0,-43 7,-29 -7,-29", fill: "#ce1126" }));
+  gYou.appendChild(gYouArrow);
+  gYou.appendChild(el("ellipse", { cx: 2, cy: 2.5, rx: 7, ry: 3, fill: "#28371e", opacity: .18 }));
+  gYou.appendChild(el("circle", { r: 7, fill: "#f2a900", stroke: "#12395c", "stroke-width": 2 }));
+  fSvg.appendChild(gYou);
+  fSvg.appendChild(stick);
+
+  const chrome = el("g", { class: "fieldChrome" });
+  const sc = el("g", { transform: "translate(58,126)" });
+  sc.appendChild(el("line", { x1: 0, y1: 0, x2: 50, y2: 0, stroke: "#5d6f7d", "stroke-width": 2 }));
+  [0, 50].forEach(x => sc.appendChild(el("line", { x1: x, y1: -4, x2: x, y2: 4, stroke: "#5d6f7d", "stroke-width": 2 })));
+  const sct = el("text", { x: 25, y: -6, "text-anchor": "middle", fill: "#5d6f7d", "font-size": "9" });
+  sct.textContent = "50 ft"; sc.appendChild(sct); chrome.appendChild(sc);
+
+  // footprint legend — this is what turns the prints into a measuring tool
+  const lg = el("g", { transform: "translate(-124,124)" });
+  const fp = makePrint();
+  fp.setAttribute("fill", "#5f7a4e");
+  fp.setAttribute("transform", "translate(3,0)");
+  lg.appendChild(fp);
+  const lt = el("text", { x: 11, y: 0, "dominant-baseline": "central", fill: "#5d6f7d", "font-size": "9" });
+  lt.textContent = "= 10 ft";
+  lg.appendChild(lt);
+  chrome.appendChild(lg);
+  fSvg.appendChild(chrome);
+
+}
+
+function renderMotion() {
+  gTrailLine.setAttribute("points", S.trail.map(p => `${p.x.toFixed(2)},${(-p.y).toFixed(2)}`).join(" "));
+  gYou.setAttribute("transform", `translate(${S.pos.x.toFixed(2)},${(-S.pos.y).toFixed(2)})`);
+  gYouArrow.setAttribute("transform", `rotate(${S.facing.toFixed(2)})`);
+  gYouArrow.style.display = S.finished ? "none" : "";
+  gPreview.style.display = (S.animating || S.finished) ? "none" : "";
+}
+
+function renderField() {
+  gIdeal.textContent = ""; gDots.textContent = ""; gClose.textContent = "";
+
+  if (S.finished && S.used.length === S.legs) {
+    const pts = []; let p = { x: 0, y: 0 }, b = S.used[0];
+    for (let i = 0; i < S.legs; i++) {
+      pts.push({ ...p });
+      p = { x: p.x + LEG_FT * Math.sin(rad(b)), y: p.y + LEG_FT * Math.cos(rad(b)) };
+      b = norm(b + S.turn);
+    }
+    pts.push(pts[0]);
+    gIdeal.appendChild(el("polyline", { points: pts.map(q => `${q.x.toFixed(1)},${(-q.y).toFixed(1)}`).join(" "),
+      fill: "none", stroke: "#12395c", "stroke-width": 1.6, "stroke-dasharray": "5 5", opacity: .35 }));
+  }
+
+  for (let i = 1; i <= S.leg && i < S.trail.length; i++) {
+    const p = S.trail[i];
+    gDots.appendChild(el("circle", { cx: p.x, cy: -p.y, r: 4.5, fill: "#12395c" }));
+    const t = el("text", { x: p.x, y: -p.y, "text-anchor": "middle", "dominant-baseline": "central",
+      fill: "#fff", "font-size": "6.5", "font-weight": "800" });
+    t.textContent = String(i);
+    gDots.appendChild(t);
+  }
+
+  if (S.finished) {
+    const d = Math.hypot(S.pos.x, S.pos.y);
+    if (d > 1.5) {
+      gClose.appendChild(el("line", { x1: S.pos.x, y1: -S.pos.y, x2: 0, y2: 0,
+        stroke: "#ce1126", "stroke-width": 2, "stroke-dasharray": "4 4" }));
+      // Only label a gap long enough to label. On a near miss the line is a few
+      // pixels and the text would land on the stick — the result panel below
+      // gives the exact figure anyway.
+      if (d > 15) {
+        const ux = -S.pos.x / d, uy = -S.pos.y / d;          // toward the stick
+        const lx = S.pos.x / 2 + uy * 10, ly = S.pos.y / 2 - ux * 10;
+        const t = el("text", { x: lx, y: -ly, "text-anchor": "middle",
+          "dominant-baseline": "central", fill: "#ce1126", "font-size": "10",
+          "font-weight": "800" });
+        t.textContent = `${d.toFixed(0)} ft`;
+        gClose.appendChild(t);
+      }
+    }
+  }
+  renderMotion();
+}
+
+/* ============================================================================
+   LAYOUT
+   ============================================================================ */
+function applyLayout() {
+  const stage = $("stage"), vC = $("vCompass"), vF = $("vField");
+  if (!NARROW.matches) {
+    vC.className = "view v-compass big";
+    vF.className = "view v-field big";
+    stage.appendChild(vC); stage.appendChild(vF);
+  } else {
+    const compassBig = S.bigView === "compass";
+    vC.className = "view v-compass " + (compassBig ? "big" : "small");
+    vF.className = "view v-field " + (compassBig ? "small" : "big");
+    stage.appendChild(compassBig ? vC : vF);   // big first, inset overlays it
+    stage.appendChild(compassBig ? vF : vC);
+  }
+  $("swapBtn").textContent = S.bigView === "compass" ? "Make the field bigger" : "Make the compass bigger";
+  $("dragHint").textContent = (!NARROW.matches || S.bigView === "field")
+    ? "Twist the numbered dial to set your bearing; twist the clear baseplate to turn yourself. On the field, swipe to turn or tap a spot to face it."
+    : "Twist the numbered dial to set your bearing. Twist the clear baseplate to turn yourself.";
+}
+function swapViews() { S.bigView = S.bigView === "compass" ? "field" : "compass"; applyLayout(); }
+$("swapBtn").addEventListener("click", swapViews);
+const onMQ = (m, fn) => m.addEventListener ? m.addEventListener("change", fn) : m.addListener && m.addListener(fn);
+onMQ(NARROW, applyLayout);
+const isBig = v => v.classList.contains("big");
+
+/* ============================================================================
+   UI SYNC
+   ============================================================================ */
+function setVal(id, v) { if (document.activeElement !== $(id)) $(id).value = v; }
+
+function syncUI() {
+  setVal("dialInput", S.dial);
+  setVal("faceInput", faceDeg());
+  $("faceOutRow").style.visibility = S.showFace ? "" : "hidden";
+
+  const ok = aligned(), st = $("alignStatus");
+  st.className = "status " + (ok ? "yes" : "no");
+  if (ok) {
+    st.lastElementChild.textContent = "Red is in the shed — you're lined up";
+  } else {
+    // Signed error, not the needle's reading against the dial. The dial reading
+    // wraps — two degrees past the bearing shows as 358, which looks like you
+    // are nowhere near when you are almost there. This says how far and which way.
+    const off = ((S.dial - S.facing + 540) % 360) - 180;   // + = turn right
+    const deg = Math.max(1, Math.round(Math.abs(off)));
+    st.lastElementChild.textContent =
+      `Turn yourself ${deg}° ${off > 0 ? "right" : "left"} — leave the dial alone`;
+  }
+
+  const box = $("stepBox");
+  if (S.finished) {
+    box.innerHTML = "<b>Round complete.</b> Check your result below, then start over with a new bearing.";
+  } else if (S.leg === 0) {
+    box.innerHTML = `<b>Leg 1 of ${S.legs}.</b> Plant your stick, pick any bearing you like, ` +
+      `line up the needle, and walk ${LEG_FT} feet.`;
+  } else {
+    const prev = S.used[S.leg - 1], exp = expectedBearing();
+    let h = `<b>Leg ${S.leg + 1} of ${S.legs}.</b> Add ${S.turn}&deg; to your last bearing`;
+    if (S.showMath) {
+      const raw = prev + S.turn;
+      h += `: <span class="math">${prev}&deg; + ${S.turn}&deg; = ${raw}&deg;` +
+           (raw >= 360 ? `, and ${raw} &minus; 360 = ${exp}&deg;` : "") + "</span>";
+    } else {
+      h += " (subtract 360&deg; if you go over).";
+    }
+    box.innerHTML = h;
+    if (S.dial !== exp) {
+      const w = document.createElement("div");
+      w.className = "warn";
+      w.innerHTML = `Your dial says ${S.dial}&deg;. Double-check that math — you can still walk it, ` +
+                    `but you probably won't find your stick.`;
+      box.appendChild(w);
+    }
+  }
+
+  const wb = $("walkBtn");
+  wb.disabled = S.finished || S.animating || !ok;
+  wb.textContent = S.finished ? "Round complete" : `Walk ${LEG_FT} feet`;
+
+  drawCompass();
+  renderField();
+}
+
+/* ============================================================================
+   WALKING
+   ============================================================================ */
+function walk() {
+  if (S.animating || S.finished || !aligned()) return;
+  S.animating = true;
+  S.used.push(S.dial);
+
+  const k = SLOPPY[S.sloppyIdx].scale;
+  const heading = S.facing + randn() * 1.1 * k;
+  const dist = LEG_FT * (1 + randn() * 0.018 * k);
+  const from = { ...S.pos };
+  const to = { x: from.x + dist * Math.sin(rad(heading)), y: from.y + dist * Math.cos(rad(heading)) };
+
+  S.trail.push({ ...from });
+  const idx = S.trail.length - 1;
+
+  // a group per leg, so finished legs can fade back and the current one leads
+  [...gPrints.children].forEach(g => g.setAttribute("opacity", ".46"));
+  const legPrints = el("g", { opacity: ".78", fill: "#5f7a4e" });
+  gPrints.appendChild(legPrints);
+  let nextAt = PRINT_FT / 2;          // offset half a stride so no print lands
+  const stampTo = travelled => {      // exactly under the leg marker
+    while (nextAt <= travelled) { addPrint(legPrints, from, heading, nextAt); nextAt += PRINT_FT; }
+  };
+
+  const finish = () => {
+    stampTo(dist);
+    S.pos = to; S.trail[idx] = { ...to };
+    S.leg++;
+    S.animating = false;
+    // the dial deliberately stays put — adding the turn is the Scout's job
+    if (S.leg >= S.legs) { S.finished = true; showResult(); }
+    syncUI();
+  };
+
+  if (REDUCED.matches) { finish(); return; }
+
+  const t0 = performance.now(), DUR = 850;
+  (function step(now) {
+    const u = Math.min(1, (now - t0) / DUR);
+    const e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    S.pos = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+    S.trail[idx] = { ...S.pos };
+    stampTo(dist * e);
+    renderMotion();
+    if (u < 1) requestAnimationFrame(step); else finish();
+  })(t0);
+}
+
+function showResult() {
+  const d = Math.hypot(S.pos.x, S.pos.y);
+  let rank, head, msg;
+  if (d < 10)      { rank = "a"; head = "Right on the stick."; msg = "That is field-ready work. Go do it outside."; }
+  else if (d < 25) { rank = "a"; head = "Close enough to reach out and touch it."; msg = "Solid. Tighten up your sighting and you'll land on it."; }
+  else if (d < 50) { rank = "b"; head = "In the neighborhood."; msg = "Something drifted. Check whether it was your bearings or your pacing."; }
+  else             { rank = "c"; head = "You'd be hunting for that stick."; msg = "Walk through the math again and sight more carefully on each leg."; }
+
+  const mathOK = S.used.every((b, i) => i === 0 || b === norm(S.used[i - 1] + S.turn));
+  const rows = S.used.map((b, i) => {
+    const want = i === 0 ? b : norm(S.used[i - 1] + S.turn);
+    const good = b === want;
+    return `<tr><td>Leg ${i + 1}</td><td><b>${b}&deg;</b></td>` +
+           `<td style="color:${good ? "var(--green)" : "var(--red)"}">${good ? "✓" : "should have been " + want + "°"}</td></tr>`;
+  }).join("");
+
+  const box = $("result");
+  box.className = "result show rank-" + rank;
+  box.innerHTML =
+    `<div class="score">${d.toFixed(1)} feet from your stick</div>` +
+    `<div><b>${head}</b> ${msg}</div>` +
+    (mathOK ? "" : `<div class="warn">Your bearing math slipped on at least one leg — that's the biggest miss here, not your walking.</div>`) +
+    `<div class="recap">Bearings you used, after walking ${LEG_FT * S.legs} feet total:` +
+    `<table>${rows}</table></div>`;
+}
+
+function reset() {
+  S.leg = 0; S.pos = { x: 0, y: 0 }; S.trail = [{ x: 0, y: 0 }];
+  S.used = []; S.finished = false; S.animating = false;
+  gPrints.textContent = ""; printCount = 0;
+  $("result").className = "result";
+  syncUI();
+}
+
+/* ============================================================================
+   CONTROLS
+   ============================================================================ */
+function setDial(v) { S.dial = norm(Math.round(v)); syncUI(); }
+function setFace(v) { S.facing = norm(v); syncUI(); }
+
+function holdable(btn, fn) {
+  let to = null, iv = null;
+  const stop = () => { clearTimeout(to); clearInterval(iv); to = iv = null; };
+  btn.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    fn();
+    to = setTimeout(() => { iv = setInterval(fn, 60); }, 350);
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => btn.addEventListener(ev, stop));
+  btn.addEventListener("click", e => { if (e.detail === 0) fn(); });   // keyboard
+}
+document.querySelectorAll("[data-dial]").forEach(b =>
+  holdable(b, () => setDial(S.dial + Number(b.dataset.dial))));
+document.querySelectorAll("[data-face]").forEach(b =>
+  holdable(b, () => setFace(faceDeg() + Number(b.dataset.face))));
+
+const numeric = (id, apply) => {
+  $(id).addEventListener("input", e => {
+    const v = Number(e.target.value);
+    if (e.target.value !== "" && Number.isFinite(v)) apply(v);
+  });
+  $(id).addEventListener("blur", () => syncUI());
+};
+numeric("dialInput", v => setDial(v));
+numeric("faceInput", v => setFace(Math.round(v)));
+$("walkBtn").addEventListener("click", walk);
+$("resetBtn").addEventListener("click", reset);
+
+/* ---- compass gestures -----------------------------------------------------
+   Three concentric zones, outside in:
+     r > bezel + 2    the baseplate  -> twist it and your body turns with it
+     face-8 .. bezel  the dial ring  -> twist it to set your bearing
+     r < face-8       the needle     -> swipe across to turn your body
+--------------------------------------------------------------------------- */
+(function () {
+  const local = ev => {
+    const m = cSvg.getScreenCTM();
+    if (!m) return null;
+    const p = cSvg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+    return p.matrixTransform(m.inverse());
+  };
+  const ang = p => norm(Math.atan2(p.x, -p.y) * 180 / Math.PI);
+  const delta = (a, last) => { let d = a - last; if (d > 180) d -= 360; if (d < -180) d += 360; return d; };
+
+  let mode = null, last = 0, swipeFrom = 0;
+
+  cSvg.addEventListener("pointerdown", e => {
+    if (NARROW.matches && !isBig($("vCompass"))) return;   // the inset is display-only
+    const p = local(e); if (!p) return;
+    const r = Math.hypot(p.x, p.y);
+    if (r > C.bezel + 2)      { mode = "plate"; last = ang(p); }
+    else if (r > C.face - 8)  { mode = "ring";  last = ang(p); }
+    else                      { mode = "swipe"; swipeFrom = e.clientX; }
+    try { cSvg.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  cSvg.addEventListener("pointermove", e => {
+    if (!mode) return;
+    if (mode === "swipe") {
+      const dx = e.clientX - swipeFrom;
+      swipeFrom = e.clientX;
+      setFace(S.facing + dx * DEG_PER_PX);
+      return;
+    }
+    const p = local(e); if (!p) return;
+    const a = ang(p), d = delta(a, last);
+    last = a;
+    // the plate carries you round with it; the ring turns against the plate
+    if (mode === "plate") setFace(S.facing + d);
+    else setDial(S.dial - d);
+  });
+  ["pointerup", "pointercancel"].forEach(ev => cSvg.addEventListener(ev, () => { mode = null; }));
+})();
+
+/* ---- field: swipe to turn, tap to aim ---------------------------------- */
+(function () {
+  let active = false, lastX = 0, moved = 0, downX = 0, downY = 0;
+
+  const worldPoint = ev => {
+    const m = fSvg.getScreenCTM();
+    if (!m) return null;
+    const p = fSvg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+    const q = p.matrixTransform(m.inverse());
+    return { x: q.x, y: -q.y };
+  };
+
+  fSvg.addEventListener("pointerdown", e => {
+    if (S.finished || S.animating) return;
+    if (NARROW.matches && !isBig($("vField"))) return;
+    active = true; lastX = downX = e.clientX; downY = e.clientY; moved = 0;
+    try { fSvg.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  fSvg.addEventListener("pointermove", e => {
+    if (!active) return;
+    const dx = e.clientX - lastX;
+    lastX = e.clientX;
+    moved = Math.max(moved, Math.hypot(e.clientX - downX, e.clientY - downY));
+    if (moved > TAP_SLOP / 2) { setFace(S.facing + dx * DEG_PER_PX); e.preventDefault(); }
+  });
+  fSvg.addEventListener("pointerup", e => {
+    if (!active) return;
+    active = false;
+    if (moved <= TAP_SLOP) {
+      const w = worldPoint(e);
+      if (w) {
+        const dx = w.x - S.pos.x, dy = w.y - S.pos.y;
+        if (Math.hypot(dx, dy) > 4) setFace(Math.atan2(dx, dy) * 180 / Math.PI);
+      }
+    }
+  });
+  fSvg.addEventListener("pointercancel", () => { active = false; });
+
+  ["vCompass", "vField"].forEach(id => $(id).addEventListener("click", e => {
+    if (NARROW.matches && !isBig($(id))) { e.stopPropagation(); swapViews(); }
+  }));
+})();
+
+/* ---- settings ---------------------------------------------------------- */
+$("sloppy").addEventListener("input", e => {
+  S.sloppyIdx = Number(e.target.value);
+  const s = SLOPPY[S.sloppyIdx];
+  $("sloppyNote").innerHTML = `<b>${s.name}.</b> ${s.note}`;
+});
+$("legsSel").addEventListener("change", e => {
+  S.legs = Number(e.target.value);
+  S.turn = 360 / S.legs;
+  reset();
+});
+$("showFace").addEventListener("change", e => { S.showFace = e.target.checked; syncUI(); });
+$("showMath").addEventListener("change", e => { S.showMath = e.target.checked; syncUI(); });
+
+/* ---- settings modal ---------------------------------------------------- */
+const modal = $("settingsModal");
+$("settingsBtn").addEventListener("click", () => {
+  if (modal.showModal) modal.showModal();
+  else modal.setAttribute("open", "");        // very old browsers: inline fallback
+});
+// clicking the backdrop (i.e. the dialog itself, outside .modalInner) closes it
+modal.addEventListener("click", e => { if (e.target === modal && modal.close) modal.close(); });
+
+/* ============================================================================
+   GO
+   ============================================================================ */
+buildCompass();
+buildField();
+applyLayout();
+$("sloppy").dispatchEvent(new Event("input"));
+syncUI();
+</script>
+</body>
+</html>
