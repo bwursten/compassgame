@@ -11,10 +11,17 @@
   COMPASS GAME  —  single self-contained file. No libraries, no build step,
   no browser storage. Works offline once loaded.
 
-  To embed in a page:
+  To embed in a page — and it MUST be an iframe, not pasted inline. The title
+  cover is position:fixed and suppresses page scrolling until Play is pressed,
+  which is correct inside a frame but would hijack a host page:
+
       <iframe src="compass-game.html" title="Compass Game"
               style="width:100%;height:1300px;border:0"
-              loading="lazy"></iframe>
+              sandbox="allow-scripts" loading="lazy"></iframe>
+
+  sandbox="allow-scripts" is belt and braces: nothing here needs same-origin,
+  storage, forms or navigation, so an opaque origin costs nothing and limits the
+  damage from anything added later.
 
   Height matters: the page cannot resize its own iframe. The layout needs about
   1140px, and the result panel adds roughly 150px more once a round finishes, so
@@ -57,6 +64,48 @@
   p{margin:0 0 10px}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;
          padding:16px;box-shadow:0 1px 2px rgba(20,40,60,.06)}
+
+  /* ---------------- title cover ----------------
+     Sits over the game until PLAY is pressed. The cream and the two ink colours
+     are sampled straight out of cover.png so this matches the mock exactly.
+     The logo is a cropped bitmap on that same cream, so it tiles in seamlessly —
+     if you ever change --cover-bg, the logo will show a cream box behind it. */
+  .cover{
+    position:fixed;inset:0;z-index:20;overflow:auto;
+    display:flex;align-items:center;justify-content:center;
+    background:#f4f0e5;padding:24px 16px;
+  }
+  .coverInner{margin:auto;width:100%;max-width:404px;text-align:center}
+  /* 330px is the wordmark's natural width, so it renders 1:1 with no upscaling */
+  .coverLogo{display:block;width:min(330px,78%);height:auto;margin:0 auto 4px}
+  .coverTitle{
+    margin:0;color:#606e7b;font-weight:800;
+    text-transform:uppercase;letter-spacing:.04em;line-height:1.1;
+    font-size:clamp(1.6rem,9vw,2.5rem);
+  }
+  .coverTitle span{display:block}
+  /* Wider than it looks: the compass drawing keeps empty margin around the plate
+     so the plate can rotate without clipping, and only ~65% of the box is plate.
+     392px of box gives a plate about 254px across, matching the mock. */
+  /* Negative margins claw back the empty rotation margin: the plate fills only
+     71% of the box height, leaving ~56px of nothing above and below it, so
+     without this the perceived gaps are 80px instead of the mock's 26-30px. */
+  .coverCompass{width:min(392px,96%);margin:-26px auto -30px}
+  /* The compass carries an opaque backing so it pairs with the field view in the
+     game. On the cover the cream shows through instead, matching the mock — and
+     it has to, or the negative margins above would paint over the title. */
+  .coverCompass .compassSurface{display:none}
+  .coverCompass svg{display:block;width:100%;height:auto}
+  .coverBtns{display:flex;align-items:center;justify-content:center;gap:10px}
+  .coverBtns .play{
+    flex:0 0 auto;min-width:126px;min-height:52px;
+    border-color:var(--line);color:#606e7b;
+    font-size:1.3rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .coverBtns .play:hover{background:#eaf1f7}
+  body.playing .cover{display:none}
+  body:not(.playing){overflow:hidden}
+  .panel:focus{outline:none}
 
   /* Settings lives out of the way at the top of the panel — a leader's control,
      not something a Scout needs to walk the triangle. */
@@ -154,6 +203,7 @@
 
   .status{display:flex;align-items:center;gap:9px;justify-content:center;font-weight:600;
           font-size:.94rem;border-radius:9px;padding:11px 12px;margin-top:12px}
+  .status.plain{background:#f2f0ea;color:var(--muted)}
   .status.no{background:#fdeef0;color:var(--red-ink)}
   .status.yes{background:#e8f5ec;color:var(--green-ink)}
   .dot{width:10px;height:10px;border-radius:99px;background:currentColor;flex:0 0 auto}
@@ -172,6 +222,9 @@
   .result.rank-a{background:#e8f5ec;border:1px solid #a9d9bb} .result.rank-a .score{color:var(--green-ink)}
   .result.rank-b{background:#fff8e6;border:1px solid #e8d79a} .result.rank-b .score{color:var(--gold-ink)}
   .result.rank-c{background:#fdeef0;border:1px solid #edbfc6} .result.rank-c .score{color:var(--red-ink)}
+  .result .tip{margin-top:10px;padding:9px 12px;border-radius:8px;
+    background:rgba(255,255,255,.66);font-size:.89rem;color:var(--ink)}
+  .result .tip b{color:var(--navy)}
   .recap{font-size:.9rem;margin-top:8px;color:var(--muted)}
   .recap table{border-collapse:collapse;margin-top:6px;font-variant-numeric:tabular-nums}
   .recap td{padding:2px 12px 2px 0}
@@ -191,9 +244,22 @@
   .modalHead h2{margin:0}
   .iconBtn{min-width:var(--tap);padding:0;font-size:1.5rem;line-height:1;
     border-color:var(--line);color:var(--muted);flex:0 0 auto}
-  .modalInner h3{font-size:.95rem;margin:16px 0 6px;color:var(--navy)}
-  .modalInner ol,.modalInner ul{margin:0 0 10px;padding-left:22px}
-  .modalInner li{margin-bottom:6px}
+  /* Narrower than the settings modal: at 680px a line of 16px text runs to about
+     80 characters, well past the 45-75 that reads comfortably. */
+  .modal.narrow{max-width:min(560px,92vw)}
+  .modalInner h3{font-size:1.02rem;margin:24px 0 9px;color:var(--navy)}
+  .modalInner .lead{font-size:1.04rem;margin-bottom:18px}
+  .modalInner ol,.modalInner ul{margin:0 0 12px;padding-left:22px}
+  .modalInner li{margin-bottom:7px;line-height:1.5}
+  /* numbered discs, so the sequence is scannable rather than a wall of text */
+  .modalInner ol.helpSteps{list-style:none;padding:0;counter-reset:hs}
+  .helpSteps li{counter-increment:hs;position:relative;padding-left:38px;margin-bottom:12px}
+  .helpSteps li::before{
+    content:counter(hs);position:absolute;left:0;top:.05em;
+    width:26px;height:26px;border-radius:99px;background:var(--navy);color:#fff;
+    font-size:.82rem;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+  .helpTip{background:#f2f0ea;border-radius:9px;padding:10px 13px;font-size:.93rem;margin:0 0 6px}
   .modalInner li b,.modalInner p b{color:var(--navy)}
   .helpNote{background:#f6f3ea;border-radius:9px;padding:10px 12px;font-size:.9rem;margin:14px 0 0}
   .modalFoot{display:flex;justify-content:flex-end;margin-top:16px}
@@ -268,9 +334,25 @@
   </symbol>
 </svg>
 
+<div id="cover" class="cover">
+  <div class="coverInner">
+    <img class="coverLogo" src="scout-life-logo.png" width="330" height="78" alt="Scout Life">
+    <p class="coverTitle"><span>&mdash;&nbsp;Compass&nbsp;&mdash;</span><span>Game</span></p>
+    <div class="coverCompass" id="coverCompass"></div>
+    <div class="coverBtns">
+      <button class="iconBtn" id="coverHelpBtn" type="button" aria-haspopup="dialog"
+              title="How to play" aria-label="How to play"><svg class="ic"><use href="#help"/></svg></button>
+      <button class="play" id="playBtn" type="button">Play</button>
+      <button class="iconBtn" id="coverSettingsBtn" type="button" aria-haspopup="dialog"
+              title="Settings" aria-label="Settings"><svg class="ic"><use href="#gear"/></svg></button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
 
-  <section class="panel">
+  <!-- inert until PLAY, so nothing behind the cover can be reached by tabbing -->
+  <section class="panel" id="gamePanel" tabindex="-1" inert>
     <div class="panelBar">
       <button class="iconBtn" id="helpBtn" type="button" aria-haspopup="dialog"
               title="How to play" aria-label="How to play"><svg class="ic"><use href="#help"/></svg></button>
@@ -358,33 +440,41 @@
 </div>
 
 <!-- ============ HOW TO PLAY (hidden until the ? button is pressed) ============ -->
-<dialog class="modal" id="helpModal" aria-labelledby="helpTitle">
+<dialog class="modal narrow" id="helpModal" aria-labelledby="helpTitle">
   <form method="dialog" class="modalInner">
     <div class="modalHead">
       <h2 id="helpTitle">How to play</h2>
       <button class="iconBtn" value="close" aria-label="Close instructions">&times;</button>
     </div>
 
-    <p><b>The goal:</b> walk three legs of 100 feet, turning 120&deg; each time, and finish
-      standing next to the stick you started at.</p>
+    <p class="lead"><b>The goal:</b> walk three legs of 100 feet, turning 120&deg; each time, and
+      finish standing next to the stick you started at.</p>
 
-    <ol>
-      <li><b>Pick a bearing</b> for leg 1 &mdash; any number you like &mdash; and turn the dial to it.</li>
+    <ol class="helpSteps">
+      <li><b>Pick any bearing</b> for your first leg. Turn the dial to it.</li>
       <li><b>Turn yourself</b> until the red needle sits inside the red shed. The shed lights up
         when you're lined up.</li>
-      <li><b>Press Walk 100 feet.</b> Footprints appear as you go, one for every 10 feet.</li>
-      <li><b>Add 120&deg;</b> to your last bearing and set the dial again. If the total goes over
-        360&deg;, subtract 360.</li>
-      <li>Line up and walk again. After the third leg, see how close you came to your stick.</li>
+      <li><b>Press Walk 100 feet.</b> Footprints appear as you go &mdash; one every 10 feet.</li>
+      <li><b>Add or subtract 120&deg;</b> from that bearing. Set the dial to the new number.
+        On this leg, either one works.</li>
+      <li><b>Keep turning the same way</b> for the last leg. Swapping directions won't bring you home.</li>
+      <li><b>Line up and walk</b> each new leg. After the third, see how close you got.</li>
     </ol>
+
+    <p class="helpTip">Gone over 360&deg;? Subtract 360. Dropped below 0&deg;? Add 360.</p>
 
     <h3>Ways to turn things</h3>
     <ul>
       <li>Twist the <b>numbered dial</b> to set your bearing.</li>
-      <li>Twist the <b>clear baseplate</b> around it to turn yourself.</li>
+      <li>Twist the <b>clear baseplate</b> to turn yourself.</li>
       <li><b>Swipe across the field</b> to turn, or tap a spot to face it.</li>
       <li>Or use the <b>arrow buttons</b> under each step.</li>
     </ul>
+
+    <h3>If it's too hard</h3>
+    <p>The <b>gear button</b> at the top has a <b>Make it easier</b> section &mdash; coaching while
+      you line up, and the bearing math worked out for you. Switch them off once you've got
+      the hang of it.</p>
 
     <p class="helpNote">The needle always points north &mdash; it never moves. The compass turns
       around it, exactly as it would in your hands.</p>
@@ -411,12 +501,12 @@
     <div class="settings-grid">
       <div class="ctl">
         <span class="ctl-label">How steady are your hands?</span>
-        <input type="range" id="sloppy" min="0" max="3" step="1" value="2" style="width:100%;height:var(--tap)">
+        <input type="range" id="sloppy" autocomplete="off" min="0" max="3" step="1" value="2" style="width:100%;height:var(--tap)">
         <div class="field-note" id="sloppyNote"></div>
       </div>
       <div class="ctl">
         <span class="ctl-label">Number of legs</span>
-        <select id="legsSel">
+        <select id="legsSel" autocomplete="off">
           <option value="3" selected>3 legs, turn 120&deg; (the classic)</option>
           <option value="4">4 legs, turn 90&deg;</option>
           <option value="5">5 legs, turn 72&deg;</option>
@@ -425,9 +515,10 @@
         <div class="field-note">Changing this starts a fresh round.</div>
       </div>
       <div class="ctl">
-        <span class="ctl-label">Helpers</span>
-        <label class="chk"><input type="checkbox" id="showFace" checked> Show the degrees I'm facing</label>
-        <label class="chk"><input type="checkbox" id="showMath" checked> Show me the bearing math</label>
+        <span class="ctl-label">Make it easier</span>
+        <label class="chk"><input type="checkbox" id="showHints" autocomplete="off"> Coach me while I line up</label>
+        <label class="chk"><input type="checkbox" id="showMath" autocomplete="off"> Show me the bearing math</label>
+        <label class="chk"><input type="checkbox" id="showFace" autocomplete="off" checked> Show the degrees I'm facing</label>
       </div>
     </div>
 
@@ -460,7 +551,14 @@
    ============================================================================ */
 
 const SVGNS = "http://www.w3.org/2000/svg";
-const el = (t, a = {}) => { const n = document.createElementNS(SVGNS, t); for (const k in a) n.setAttribute(k, a[k]); return n; };
+// Object.keys, not for...in: for...in would walk the prototype chain, so a
+// polluted Object.prototype could inject attributes (onload &c.) onto every
+// SVG element this creates. Own keys only.
+const el = (t, a = {}) => {
+  const n = document.createElementNS(SVGNS, t);
+  for (const k of Object.keys(a)) n.setAttribute(k, a[k]);
+  return n;
+};
 const $ = id => document.getElementById(id);
 const norm = a => ((a % 360) + 360) % 360;
 const angDiff = (a, b) => { const d = Math.abs(norm(a) - norm(b)); return d > 180 ? 360 - d : d; };
@@ -529,12 +627,32 @@ const S = {
   trail: [{ x: 0, y: 0 }],
   used: [],
   sloppyIdx: 2,
-  showFace: true, showMath: true,
+  showFace: true, showMath: false, showHints: false,   // both crutches start off
   bigView: "field",
+  started: false,                     // false while the title cover is up
   animating: false, finished: false
 };
 
-const expectedBearing = () => S.leg === 0 ? null : norm(S.used[S.leg - 1] + S.turn);
+/* Either direction closes the loop — clockwise or anticlockwise trace the same
+   shape — but only if you keep turning the SAME way. So leg 2 has two right
+   answers, and from leg 3 on the choice made at leg 2 is locked in.
+   Returns 0 while undecided, or if leg 2 was simply wrong. */
+function turnDir() {
+  if (S.used.length < 2) return 0;
+  const step = norm(S.used[1] - S.used[0]);
+  if (step === norm(S.turn)) return 1;
+  if (step === norm(-S.turn)) return -1;
+  return 0;
+}
+
+/* Every bearing that would still bring them home, given what they've walked. */
+function expectedBearings(leg = S.leg, dir = turnDir()) {
+  if (leg === 0) return null;                       // leg 1: any bearing at all
+  const prev = S.used[leg - 1];
+  const both = [norm(prev + S.turn), norm(prev - S.turn)];
+  if (leg === 1 || dir === 0) return both;          // leg 2, or no direction to lock
+  return [norm(prev + dir * S.turn)];
+}
 const aligned = () => angDiff(S.facing, S.dial) <= ALIGN_TOL;
 const faceDeg = () => norm(Math.round(S.facing));
 
@@ -550,7 +668,8 @@ function buildCompass() {
   // A surface behind the compass, matching the field's, so the two views read
   // as a matched pair and their captions line up with a visible edge. It does
   // not rotate — only the compass on top of it does.
-  cSvg.appendChild(el("rect", { x: -125, y: -125, width: 250, height: 250, rx: 10, fill: "#f7f4ed" }));
+  cSvg.appendChild(el("rect", { x: -125, y: -125, width: 250, height: 250, rx: 10,
+    fill: "#f7f4ed", class: "compassSurface" }));
 
   // everything that turns with the Scout
   gBase = el("g", { class: "plate" });
@@ -582,20 +701,42 @@ function buildCompass() {
   gBase.appendChild(gHousing);
 
   gHousing.appendChild(el("circle", { r: C.bezel, fill: "#3c4a55" }));
+
+  /* The dial used to be 432 separate <g>/<line> nodes — 36 bezel notches and 180
+     graduations. SVG groups are not composited, so every one of them was
+     re-rastered on each rotation frame. Baking each set into a single <path>
+     drops the compass from ~504 elements to ~75 and lets the renderer stroke one
+     geometry per set. Same picture, a fraction of the paint and start-up cost. */
+  const spin = (x, y, deg) => {                 // rotate a point clockwise, SVG-style
+    const r = rad(deg), c = Math.cos(r), s2 = Math.sin(r);
+    return [(x * c - y * s2).toFixed(2), (x * s2 + y * c).toFixed(2)];
+  };
+
+  // bezel grip notches, every 10 degrees, as one filled path
+  let notches = "";
   for (let a = 0; a < 360; a += 10) {
-    const g = el("g", { transform: `rotate(${a})` });
-    g.appendChild(el("rect", { x: -1.6, y: -C.bezel, width: 3.2, height: C.bezel - C.face, fill: "#8b98a3" }));
-    gHousing.appendChild(g);
+    const corners = [[-1.6, -C.bezel], [1.6, -C.bezel], [1.6, -C.face], [-1.6, -C.face]]
+      .map(([x, y]) => spin(x, y, a));
+    notches += `M${corners[0]} L${corners[1]} L${corners[2]} L${corners[3]}Z`;
   }
+  gHousing.appendChild(el("path", { d: notches, fill: "#8b98a3" }));
+
   gHousing.appendChild(el("circle", { r: C.face, fill: "#fbfaf6", stroke: "#2b3742", "stroke-width": 1.5 }));
 
+  // graduations, in three weights. Only the 2-degree minors carry .dialNums, so
+  // they alone drop out at phone-inset size, exactly as before.
+  const grads = { major: "", mid: "", minor: "" };
   for (let a = 0; a < 360; a += 2) {
-    const major = a % 30 === 0, mid = a % 10 === 0;
-    const g = el("g", { transform: `rotate(${a})`, class: major || mid ? "" : "dialNums" });
-    g.appendChild(el("line", { x1: 0, y1: -C.face, x2: 0, y2: -C.face + (major ? 10 : mid ? 6 : 3),
-      stroke: major ? "#2b3742" : "#7b8892", "stroke-width": major ? 2 : 1 }));
-    gHousing.appendChild(g);
+    const kind = a % 30 === 0 ? "major" : a % 10 === 0 ? "mid" : "minor";
+    const len = kind === "major" ? 10 : kind === "mid" ? 6 : 3;
+    grads[kind] += `M${spin(0, -C.face, a)} L${spin(0, -C.face + len, a)}`;
   }
+  gHousing.appendChild(el("path", { d: grads.minor, fill: "none",
+    stroke: "#7b8892", "stroke-width": 1, class: "dialNums" }));
+  gHousing.appendChild(el("path", { d: grads.mid, fill: "none",
+    stroke: "#7b8892", "stroke-width": 1 }));
+  gHousing.appendChild(el("path", { d: grads.major, fill: "none",
+    stroke: "#2b3742", "stroke-width": 2 }));
 
   const cardinals = { 0: "N", 90: "E", 180: "S", 270: "W" };
   for (let a = 0; a < 360; a += 30) {
@@ -619,7 +760,11 @@ function buildCompass() {
     d: `M 0,${-C.orientTip} L 14,-21 L 8.5,-21 L 8.5,28 L -8.5,28 L -8.5,-21 L -14,-21 Z`,
     fill: "none", stroke: "#ce1126", "stroke-width": 2.4, "stroke-linejoin": "round" });
   gHousing.appendChild(orientArrow);
-  const orientLines = el("g", { stroke: "#ce1126", "stroke-width": 1, opacity: .45, class: "dialNums" });
+  // stroke-opacity, not opacity: group opacity would make the renderer composite
+  // this through an offscreen layer on every rotation frame. Stroke-only content,
+  // so the result is identical.
+  const orientLines = el("g", { stroke: "#ce1126", "stroke-width": 1,
+    "stroke-opacity": .45, class: "dialNums" });
   [-18, 18].forEach(x => orientLines.appendChild(el("line", { x1: x, y1: -12, x2: x, y2: 30 })));
   gHousing.appendChild(orientLines);
 
@@ -655,15 +800,15 @@ function buildCompass() {
 }
 
 function drawCompass() {
-  gBase.setAttribute("transform", `rotate(${S.facing.toFixed(2)})`);
-  gHousing.setAttribute("transform", `rotate(${-S.dial})`);
+  setAttr(gBase, "transform", `rotate(${S.facing.toFixed(2)})`);
+  setAttr(gHousing, "transform", `rotate(${-S.dial})`);
   // "Red in the shed" — so the shed stays red at all times. Alignment shows as
   // the shed lighting up and its outline thickening: two cues, neither of which
   // depends on telling red from green.
   const ok = aligned();
-  orientArrow.setAttribute("fill", ok ? "#f2a900" : "none");
-  orientArrow.setAttribute("fill-opacity", ok ? ".45" : "0");
-  orientArrow.setAttribute("stroke-width", ok ? 3.6 : 2.4);
+  setAttr(orientArrow, "fill", ok ? "#f2a900" : "none");
+  setAttr(orientArrow, "fill-opacity", ok ? ".45" : "0");
+  setAttr(orientArrow, "stroke-width", ok ? 3.6 : 2.4);
 }
 
 /* ============================================================================
@@ -742,10 +887,12 @@ function buildField() {
   fSvg.appendChild(marks);
 
   gIdeal = el("g"); fSvg.appendChild(gIdeal);
-  gPrints = el("g", { class: "fieldDetail" }); fSvg.appendChild(gPrints);
+  // Trail first, footprints over the top: the prints straddle the line, so
+  // whichever is drawn second wins. Thinner line, whole footprints.
   gTrailLine = el("polyline", { points: "0,0", fill: "none", stroke: "#12395c",
-    "stroke-width": 3.4, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    "stroke-width": 2.2, "stroke-linejoin": "round", "stroke-linecap": "round" });
   fSvg.appendChild(gTrailLine);
+  gPrints = el("g", { class: "fieldDetail" }); fSvg.appendChild(gPrints);
   gClose = el("g"); fSvg.appendChild(gClose);
   gDots = el("g"); fSvg.appendChild(gDots);
 
@@ -815,22 +962,36 @@ function buildField() {
 }
 
 function renderMotion() {
-  gTrailLine.setAttribute("points", S.trail.map(p => `${p.x.toFixed(2)},${(-p.y).toFixed(2)}`).join(" "));
-  gYou.setAttribute("transform", `translate(${S.pos.x.toFixed(2)},${(-S.pos.y).toFixed(2)})`);
-  gYouArrow.setAttribute("transform", `rotate(${S.facing.toFixed(2)})`);
-  gYouArrow.style.display = S.finished ? "none" : "";
-  gPreview.style.display = (S.animating || S.finished) ? "none" : "";
+  setAttr(gTrailLine, "points", S.trail.map(p => `${p.x.toFixed(2)},${(-p.y).toFixed(2)}`).join(" "));
+  setAttr(gYou, "transform", `translate(${S.pos.x.toFixed(2)},${(-S.pos.y).toFixed(2)})`);
+  setAttr(gYouArrow, "transform", `rotate(${S.facing.toFixed(2)})`);
+  const aDisp = S.finished ? "none" : "";
+  const pDisp = (S.animating || S.finished) ? "none" : "";
+  if (gYouArrow.style.display !== aDisp) gYouArrow.style.display = aDisp;
+  if (gPreview.style.display !== pDisp) gPreview.style.display = pDisp;
 }
 
-function renderField() {
+/* renderField() tears down and rebuilds three subtrees, and syncUI() calls it on
+   every pointermove. During a drag only `facing`/`dial` change, and none of these
+   layers depend on those — so fingerprint what they DO depend on and skip the
+   work when it is unchanged. Turns a per-frame rebuild into a string compare. */
+let fieldKey = null, stepHTML = null;
+function renderField(force) {
+  const key = `${S.leg}|${S.finished}|${S.trail.length}|${S.legs}|${S.used.join(",")}`;
+  if (!force && key === fieldKey) { renderMotion(); return; }
+  fieldKey = key;
+
   gIdeal.textContent = ""; gDots.textContent = ""; gClose.textContent = "";
 
   if (S.finished && S.used.length === S.legs) {
+    // follows the direction they actually turned, so an anticlockwise round gets
+    // its own mirrored ideal shape rather than a clockwise one it never matched
+    const d = turnDir() || 1;
     const pts = []; let p = { x: 0, y: 0 }, b = S.used[0];
     for (let i = 0; i < S.legs; i++) {
       pts.push({ ...p });
       p = { x: p.x + LEG_FT * Math.sin(rad(b)), y: p.y + LEG_FT * Math.cos(rad(b)) };
-      b = norm(b + S.turn);
+      b = norm(b + d * S.turn);
     }
     pts.push(pts[0]);
     gIdeal.appendChild(el("polyline", { points: pts.map(q => `${q.x.toFixed(1)},${(-q.y).toFixed(1)}`).join(" "),
@@ -872,17 +1033,19 @@ function renderField() {
    LAYOUT
    ============================================================================ */
 function applyLayout() {
-  const stage = $("stage"), vC = $("vCompass"), vF = $("vField");
+  const vC = $("vCompass"), vF = $("vField");
+  /* Class swaps only — no DOM reordering. Re-appending a view dragged its whole
+     subtree through detach/attach plus a full relayout, a visible hitch on the
+     phone's swap button. It was never needed: the inset is absolutely positioned
+     with z-index, so it stacks above the big view whatever the document order,
+     and the desktop's left-to-right order is simply the order in the markup. */
   if (!NARROW.matches) {
     vC.className = "view v-compass big";
     vF.className = "view v-field big";
-    stage.appendChild(vC); stage.appendChild(vF);
   } else {
     const compassBig = S.bigView === "compass";
     vC.className = "view v-compass " + (compassBig ? "big" : "small");
     vF.className = "view v-field " + (compassBig ? "small" : "big");
-    stage.appendChild(compassBig ? vC : vF);   // big first, inset overlays it
-    stage.appendChild(compassBig ? vF : vC);
   }
   $("swapBtn").textContent = S.bigView === "compass" ? "Make the field bigger" : "Make the compass bigger";
   $("dragHint").textContent = (!NARROW.matches || S.bigView === "field")
@@ -899,55 +1062,87 @@ const isBig = v => v.classList.contains("big");
    UI SYNC
    ============================================================================ */
 function setVal(id, v) { if (document.activeElement !== $(id)) $(id).value = v; }
+/* `textContent =` and `className =` do not diff — they replace unconditionally,
+   discarding and recreating the text node each time. syncUI() runs on every
+   pointermove, where these values are usually unchanged, so guard them. */
+const setText = (n, t) => { if (n.textContent !== t) n.textContent = t; };
+/* Same reasoning for SVG attributes: writing a transform invalidates paint even
+   when the value is identical, and during a body-turn drag most of these are. */
+const setAttr = (n, k, v) => { const t = String(v); if (n.getAttribute(k) !== t) n.setAttribute(k, t); };
+const setClass = (n, c) => { if (n.className !== c) n.className = c; };
 
 function syncUI() {
   setVal("dialInput", S.dial);
   setVal("faceInput", faceDeg());
-  $("faceOutRow").style.visibility = S.showFace ? "" : "hidden";
+  const vis = S.showFace ? "" : "hidden";
+  if ($("faceOutRow").style.visibility !== vis) $("faceOutRow").style.visibility = vis;
 
   const ok = aligned(), st = $("alignStatus");
-  st.className = "status " + (ok ? "yes" : "no");
   if (ok) {
-    st.lastElementChild.textContent = "Red is in the shed — you're lined up";
-  } else {
+    setClass(st, "status yes");
+    setText(st.lastElementChild, "Red is in the shed — you're lined up");
+  } else if (S.showHints) {
     // Signed error, not the needle's reading against the dial. The dial reading
     // wraps — two degrees past the bearing shows as 358, which looks like you
     // are nowhere near when you are almost there. This says how far and which way.
+    setClass(st, "status no");
     const off = ((S.dial - S.facing + 540) % 360) - 180;   // + = turn right
     const deg = Math.max(1, Math.round(Math.abs(off)));
-    st.lastElementChild.textContent =
-      `Turn yourself ${deg}° ${off > 0 ? "right" : "left"} — leave the dial alone`;
+    setText(st.lastElementChild,
+      `Turn yourself ${deg}° ${off > 0 ? "right" : "left"} — leave the dial alone`);
+  } else {
+    // Coaching off: a neutral prompt, so the chip never moves and never tells
+    // them how far off they are. The shed lighting up is the real signal.
+    setClass(st, "status plain");
+    setText(st.lastElementChild, "Line up the needle to walk");
   }
 
-  const box = $("stepBox");
+  /* Built as one string and written only when it changes. An innerHTML assignment
+     is an HTML parse plus a subtree teardown plus a layout invalidation, and
+     syncUI() runs on every pointermove — where this string is byte-identical
+     frame after frame, because it depends on none of what a drag alters. */
+  let html;
   if (S.finished) {
-    box.innerHTML = "<b>Round complete.</b> Check your result below, then start over with a new bearing.";
+    html = "<b>Round complete.</b> Check your result below, then start over with a new bearing.";
   } else if (S.leg === 0) {
-    box.innerHTML = `<b>Leg 1 of ${S.legs}.</b> Plant your stick, pick any bearing you like, ` +
+    html = `<b>Leg 1 of ${S.legs}.</b> Plant your stick, pick any bearing you like, ` +
       `line up the needle, and walk ${LEG_FT} feet.`;
   } else {
-    const prev = S.used[S.leg - 1], exp = expectedBearing();
-    let h = `<b>Leg ${S.leg + 1} of ${S.legs}.</b> Add ${S.turn}&deg; to your last bearing`;
+    const prev = S.used[S.leg - 1], exps = expectedBearings(), dir = turnDir();
+    const open = S.leg === 1 || dir === 0;          // both directions still valid?
+
+    // The dial still shows the previous bearing until they move it, but the
+    // moment they start turning it that number is gone — so always state it.
+    let h = `<b>Leg ${S.leg + 1} of ${S.legs}.</b> Your last bearing was ` +
+            `<span class="math">${prev}&deg;</span>. `;
+    h += open
+      ? `Add <em>or</em> subtract ${S.turn}&deg; &mdash; on this leg either one works.`
+      : `Turn the same way you did last time &mdash; another ${S.turn}&deg;.`;
+
     if (S.showMath) {
-      const raw = prev + S.turn;
-      h += `: <span class="math">${prev}&deg; + ${S.turn}&deg; = ${raw}&deg;` +
-           (raw >= 360 ? `, and ${raw} &minus; 360 = ${exp}&deg;` : "") + "</span>";
+      const sum = d => {
+        const raw = prev + d * S.turn, res = norm(raw);
+        let t = `${prev}&deg; ${d > 0 ? "+" : "&minus;"} ${S.turn}&deg; = ${raw}&deg;`;
+        if (raw >= 360) t += `, then ${raw} &minus; 360 = ${res}&deg;`;
+        if (raw < 0) t += `, then ${raw} + 360 = ${res}&deg;`;
+        return t;
+      };
+      h += `<br><span class="math">` +
+           (open ? `${sum(1)}&nbsp;&nbsp;or&nbsp;&nbsp;${sum(-1)}` : sum(dir)) + `</span>`;
     } else {
-      h += " (subtract 360&deg; if you go over).";
+      h += ` If you go over 360&deg;, subtract 360. If you drop below 0&deg;, add 360.`;
     }
-    box.innerHTML = h;
-    if (S.dial !== exp) {
-      const w = document.createElement("div");
-      w.className = "warn";
-      w.innerHTML = `Your dial says ${S.dial}&deg;. Double-check that math — you can still walk it, ` +
-                    `but you probably won't find your stick.`;
-      box.appendChild(w);
+    html = h;
+    if (S.showHints && !exps.includes(S.dial)) {
+      html += `<div class="warn">Your dial says ${S.dial}&deg;. Double-check that math — you can ` +
+              `still walk it, but you probably won't find your stick.</div>`;
     }
   }
+  if (html !== stepHTML) { stepHTML = html; $("stepBox").innerHTML = html; }
 
   const wb = $("walkBtn");
   wb.disabled = S.finished || S.animating || !ok;
-  wb.textContent = S.finished ? "Round complete" : `Walk ${LEG_FT} feet`;
+  setText(wb, S.finished ? "Round complete" : `Walk ${LEG_FT} feet`);
 
   drawCompass();
   renderField();
@@ -956,6 +1151,33 @@ function syncUI() {
 /* ============================================================================
    WALKING
    ============================================================================ */
+/* Between legs the compass swings back upright. Not what a real Scout's body
+   does — you stay facing the way you walked — but it keeps the plate and its
+   printing readable, and makes each leg start from a clean, deliberate turn. */
+/* One generation counter guards every animation. Bumped by reset(), and by each
+   animation as it starts, so a reset or a newer animation cleanly abandons an
+   older rAF chain instead of letting it write to state it no longer owns. */
+let animGen = 0;
+function swingToNorth() {
+  const from = S.facing;
+  // short way round: 350 runs forward to 360 rather than back through 180
+  const delta = from <= 180 ? -from : 360 - from;
+  if (REDUCED.matches || Math.abs(delta) < 0.5) { S.facing = 0; syncUI(); return; }
+
+  const mine = ++animGen;
+  S.animating = true;                       // keeps Walk locked mid-swing
+  const t0 = performance.now(), DUR = 340;
+  (function step(now) {
+    if (mine !== animGen) return;           // a reset or newer animation took over
+    const u = Math.min(1, (now - t0) / DUR);
+    const e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    S.facing = norm(from + delta * e);
+    drawCompass(); renderMotion();
+    if (u < 1) { requestAnimationFrame(step); return; }
+    S.facing = 0; S.animating = false; syncUI();
+  })(t0);
+}
+
 function walk() {
   if (S.animating || S.finished || !aligned()) return;
   S.animating = true;
@@ -969,10 +1191,14 @@ function walk() {
 
   S.trail.push({ ...from });
   const idx = S.trail.length - 1;
+  const mine = ++animGen;         // Start over is never disabled, so the walk
+                                  // must be abandonable at any point
 
   // a group per leg, so finished legs can fade back and the current one leads
-  [...gPrints.children].forEach(g => g.setAttribute("opacity", ".46"));
-  const legPrints = el("g", { opacity: ".78", fill: "#5f7a4e" });
+  // fill-opacity rather than opacity, for the same reason — footprints are
+  // fill-only, and the walker crosses them during the animation
+  [...gPrints.children].forEach(g => g.setAttribute("fill-opacity", ".46"));
+  const legPrints = el("g", { "fill-opacity": ".78", fill: "#5f7a4e" });
   gPrints.appendChild(legPrints);
   let nextAt = PRINT_FT / 2;          // offset half a stride so no print lands
   const stampTo = travelled => {      // exactly under the leg marker
@@ -980,19 +1206,21 @@ function walk() {
   };
 
   const finish = () => {
+    if (mine !== animGen) return;
     stampTo(dist);
     S.pos = to; S.trail[idx] = { ...to };
     S.leg++;
     S.animating = false;
     // the dial deliberately stays put — adding the turn is the Scout's job
-    if (S.leg >= S.legs) { S.finished = true; showResult(); }
-    syncUI();
+    if (S.leg >= S.legs) { S.finished = true; showResult(); syncUI(); }
+    else { syncUI(); swingToNorth(); }
   };
 
   if (REDUCED.matches) { finish(); return; }
 
   const t0 = performance.now(), DUR = 850;
   (function step(now) {
+    if (mine !== animGen) return;           // reset pulled the rug
     const u = Math.min(1, (now - t0) / DUR);
     const e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
     S.pos = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
@@ -1011,13 +1239,35 @@ function showResult() {
   else if (d < 50) { rank = "b"; head = "In the neighborhood."; msg = "Something drifted. Check whether it was your bearings or your pacing."; }
   else             { rank = "c"; head = "You'd be hunting for that stick."; msg = "Walk through the math again and sight more carefully on each leg."; }
 
-  const mathOK = S.used.every((b, i) => i === 0 || b === norm(S.used[i - 1] + S.turn));
+  // Judge each leg against every bearing that would have worked, not just the
+  // clockwise one — an anticlockwise round closes just as well.
+  const dir = turnDir();
   const rows = S.used.map((b, i) => {
-    const want = i === 0 ? b : norm(S.used[i - 1] + S.turn);
-    const good = b === want;
+    const want = expectedBearings(i, dir);
+    const good = !want || want.includes(b);
+    const should = want ? "should have been " + want.map(v => v + "°").join(" or ") : "";
     return `<tr><td>Leg ${i + 1}</td><td><b>${b}&deg;</b></td>` +
-           `<td style="color:${good ? "var(--green)" : "var(--red)"}">${good ? "✓" : "should have been " + want + "°"}</td></tr>`;
+           `<td style="color:${good ? "var(--green)" : "var(--red)"}">${good ? "✓" : should}</td></tr>`;
   }).join("");
+  const mathOK = S.used.every((b, i) => {
+    const want = expectedBearings(i, dir);
+    return !want || want.includes(b);
+  });
+
+  // Offer the crutches only when there is one left to offer, and only after a
+  // round that actually went badly — telling someone who missed by 12 ft to turn
+  // on training wheels would be discouraging, not helpful.
+  const spare = [];
+  if (!S.showHints) spare.push("coaching while you line up");
+  if (!S.showMath) spare.push("the bearing math worked out for you");
+  if (!S.showFace) spare.push("the degrees you're facing");
+  const list = spare.length > 1
+    ? spare.slice(0, -1).join(", ") + " and " + spare[spare.length - 1]
+    : spare[0];
+  const tip = (d > 25 && spare.length)
+    ? `<div class="tip">Tricky one? The <b>gear button</b> at the top has a <b>Make it easier</b> ` +
+      `section &mdash; ${list}.</div>`
+    : "";
 
   const box = $("result");
   box.className = "result show rank-" + rank;
@@ -1026,13 +1276,15 @@ function showResult() {
     `<div><b>${head}</b> ${msg}</div>` +
     (mathOK ? "" : `<div class="warn">Your bearing math slipped on at least one leg — that's the biggest miss here, not your walking.</div>`) +
     `<div class="recap">Bearings you used, after walking ${LEG_FT * S.legs} feet total:` +
-    `<table>${rows}</table></div>`;
+    `<table>${rows}</table></div>` + tip;
 }
 
 function reset() {
   S.leg = 0; S.pos = { x: 0, y: 0 }; S.trail = [{ x: 0, y: 0 }];
   S.used = []; S.finished = false; S.animating = false;
+  S.facing = 0; animGen++;                  // abandons any animation in flight
   gPrints.textContent = ""; printCount = 0;
+  fieldKey = stepHTML = null;               // furniture and prompt rebuilt after a reset
   $("result").className = "result";
   syncUI();
 }
@@ -1079,11 +1331,19 @@ $("resetBtn").addEventListener("click", reset);
      r < face-8       the needle     -> swipe across to turn your body
 --------------------------------------------------------------------------- */
 (function () {
-  const local = ev => {
+  /* getScreenCTM() forces a layout flush. Reading it on every pointermove, in
+     between DOM writes, is textbook layout thrash — so take it once when the
+     gesture starts and reuse it. Safe because #compass sets touch-action:none,
+     so the page cannot scroll out from under us mid-gesture. */
+  let ctm = null;
+  const grabCTM = () => {
     const m = cSvg.getScreenCTM();
-    if (!m) return null;
+    ctm = m ? m.inverse() : null;
+  };
+  const local = ev => {
+    if (!ctm) return null;
     const p = cSvg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-    return p.matrixTransform(m.inverse());
+    return p.matrixTransform(ctm);
   };
   const ang = p => norm(Math.atan2(p.x, -p.y) * 180 / Math.PI);
   const delta = (a, last) => { let d = a - last; if (d > 180) d -= 360; if (d < -180) d += 360; return d; };
@@ -1091,7 +1351,10 @@ $("resetBtn").addEventListener("click", reset);
   let mode = null, last = 0, swipeFrom = 0;
 
   cSvg.addEventListener("pointerdown", e => {
-    if (NARROW.matches && !isBig($("vCompass"))) return;   // the inset is display-only
+    // on the cover the compass isn't inside a .view at all, so the inset rule
+    // only applies once the game has started
+    if (S.started && NARROW.matches && !isBig($("vCompass"))) return;
+    grabCTM();
     const p = local(e); if (!p) return;
     const r = Math.hypot(p.x, p.y);
     if (r > C.bezel + 2)      { mode = "plate"; last = ang(p); }
@@ -1115,7 +1378,11 @@ $("resetBtn").addEventListener("click", reset);
     if (mode === "plate") setFace(S.facing + d);
     else setDial(S.dial - d);
   });
-  ["pointerup", "pointercancel"].forEach(ev => cSvg.addEventListener(ev, () => { mode = null; }));
+  ["pointerup", "pointercancel"].forEach(ev =>
+    cSvg.addEventListener(ev, () => { mode = null; ctm = null; }));
+  // the mapping changes if the drawing is resized or moved between views
+  onMQ(NARROW, () => { ctm = null; });
+  window.addEventListener("resize", () => { ctm = null; });
 })();
 
 /* ---- field: swipe to turn, tap to aim ---------------------------------- */
@@ -1172,20 +1439,50 @@ $("legsSel").addEventListener("change", e => {
   S.turn = 360 / S.legs;
   reset();
 });
+$("showHints").addEventListener("change", e => { S.showHints = e.target.checked; syncUI(); });
 $("showFace").addEventListener("change", e => { S.showFace = e.target.checked; syncUI(); });
 $("showMath").addEventListener("change", e => { S.showMath = e.target.checked; syncUI(); });
+
+/* ---- title cover ------------------------------------------------------- */
+function startGame() {
+  $("vCompass").appendChild(cSvg);          // hand the one compass back to the game
+  document.body.classList.add("playing");
+  const panel = $("gamePanel");
+  panel.removeAttribute("inert");
+  S.started = true;
+  applyLayout();
+  syncUI();
+  panel.focus();                            // move focus off the vanished PLAY button
+}
+$("playBtn").addEventListener("click", startGame);
 
 /* ---- modals: how to play, and settings --------------------------------- */
 const openModal = m => {
   if (m.showModal) m.showModal();
   else m.setAttribute("open", "");            // very old browsers: inline fallback
 };
-[["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"]].forEach(([btn, dlg]) => {
-  const m = $(dlg);
-  $(btn).addEventListener("click", () => openModal(m));
-  // clicking the backdrop (the dialog itself, outside .modalInner) closes it
+[["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"],
+ ["coverHelpBtn", "helpModal"], ["coverSettingsBtn", "settingsModal"]].forEach(([btn, dlg]) => {
+  $(btn).addEventListener("click", () => openModal($(dlg)));
+});
+// clicking the backdrop (the dialog itself, outside .modalInner) closes it
+["helpModal", "settingsModal"].forEach(id => {
+  const m = $(id);
   m.addEventListener("click", e => { if (e.target === m && m.close) m.close(); });
 });
+
+/* Browsers restore form-control state across a reload, ignoring the `checked`
+   attribute — so a box could come back ticked while the game holds the opposite
+   default, and the switch would read as on while the feature was off. Push the
+   real state into the controls at start-up. autocomplete="off" above asks the
+   browser not to restore them at all; this is the belt to that pair of braces. */
+function syncSettingsUI() {
+  $("showHints").checked = S.showHints;
+  $("showMath").checked = S.showMath;
+  $("showFace").checked = S.showFace;
+  $("legsSel").value = String(S.legs);
+  $("sloppy").value = String(S.sloppyIdx);
+}
 
 /* ============================================================================
    GO
@@ -1193,6 +1490,8 @@ const openModal = m => {
 buildCompass();
 buildField();
 applyLayout();
+$("coverCompass").appendChild(cSvg);        // the cover borrows the live compass
+syncSettingsUI();
 $("sloppy").dispatchEvent(new Event("input"));
 syncUI();
 </script>
