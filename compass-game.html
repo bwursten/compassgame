@@ -8,8 +8,23 @@
 
 <!--
   ============================================================================
-  COMPASS GAME  —  single self-contained file. No libraries, no build step,
-  no browser storage. Works offline once loaded.
+  COMPASS GAME  —  single self-contained file. No build step. The game itself
+  works offline once loaded.
+
+  ONE OPTIONAL LIBRARY. The 3D replay fetches Three.js r128 (~600 KB, ~150 KB
+  gzipped) from cdnjs, pinned with a subresource-integrity hash, and only
+  after the player walks their first leg. If it can't load — offline, CDN
+  blocked, no WebGL — the "Watch in 3D" button simply never appears. If your
+  site has a Content-Security-Policy, allow https://cdnjs.cloudflare.com in
+  script-src for this frame.
+
+  STORAGE IS OPTIONAL. Badges, stats and the chosen level are saved to
+  localStorage only if the browser allows it. Inside the sandboxed iframe below
+  it doesn't (the frame has an opaque origin), so they last for the visit and
+  reset on reload. To keep them between visits, add allow-same-origin:
+      sandbox="allow-scripts allow-same-origin"
+  That's safe only if this file is served from a different origin than the
+  host page — otherwise the frame could reach into the page that embeds it.
 
   To embed in a page — and it MUST be an iframe, not pasted inline. The title
   cover is position:fixed and suppresses page scrolling until Play is pressed,
@@ -48,6 +63,9 @@
     --tap:44px;
   }
   *{box-sizing:border-box}
+  /* author display rules (button{display:inline-flex} &c.) beat the UA's
+     [hidden] rule, so restate it — the game toggles .hidden on buttons */
+  [hidden]{display:none !important}
   html{-webkit-text-size-adjust:100%}
   body{
     margin:0; padding:22px 14px 40px; background:var(--tan); color:var(--ink);
@@ -109,8 +127,15 @@
 
   /* Settings lives out of the way at the top of the panel — a leader's control,
      not something a Scout needs to walk the triangle. */
-  .panelBar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}
+  .panelBar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+  .barBtns{display:flex;gap:8px}
+  .levelChip{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);background:#f2f0ea;border-radius:99px;padding:5px 11px}
+  .levelChip b{color:var(--navy)}
   .ic{width:22px;height:22px;flex:0 0 auto}
+  .badgeBtn{min-width:var(--tap);padding:0 10px;gap:5px;border-color:var(--line);color:var(--muted);
+    font-size:.95rem;font-variant-numeric:tabular-nums}
+  .badgeBtn .ic{color:var(--gold-ink)}
 
   /* ---------------- stage: the two views, paired and centred ---------------- */
   .stage{position:relative;display:block}
@@ -267,6 +292,108 @@
 
   footer{margin-top:20px;font-size:.82rem;color:var(--muted);text-align:center}
 
+  /* ---------------- level picker (cover and settings) ----------------
+     Real radio inputs, visually hidden, so arrow keys and screen readers get a
+     proper radio group for free. The styled <span> is the visible button. */
+  .level{border:0;margin:18px 0 0;padding:0;min-width:0}
+  .level legend{padding:0;margin:0 auto 8px;font-size:.78rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.08em;color:#606e7b}
+  .level.inModal{margin:0 0 16px}
+  .level.inModal legend{margin:0 0 6px;color:var(--muted)}
+  .levelBtns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .levelBtns label{position:relative;display:block;cursor:pointer}
+  .levelBtns input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+  .levelBtns span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    min-height:56px;padding:6px 4px;border:1px solid var(--line);border-radius:10px;background:#fff;
+    color:var(--navy);text-align:center;line-height:1.2}
+  .levelBtns b{font-size:.98rem}
+  .levelBtns small{font-size:.74rem;color:var(--muted)}
+  .levelBtns label:hover span{background:#eaf1f7}
+  .levelBtns input:checked + span{background:var(--navy);border-color:var(--navy);color:#fff}
+  .levelBtns input:checked + span small{color:#d6e3ee}
+  .levelBtns input:focus-visible + span{outline:3px solid var(--gold);outline-offset:2px}
+  .levelNote{font-size:.84rem;color:var(--muted);margin:8px 0 0;min-height:2.7em}
+  .level.inModal .levelNote{min-height:0}
+
+  /* ---------------- guided first round ---------------- */
+  .guide{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;
+    background:#fff8e6;border:1px solid #e8d79a;border-radius:10px;padding:10px 12px}
+  .guide[hidden]{display:none}
+  .guideNum{flex:0 0 auto;width:30px;height:30px;border-radius:99px;background:var(--gold);color:var(--navy);
+    font-weight:800;display:flex;align-items:center;justify-content:center}
+  .guideText{flex:1 1 220px;font-size:.95rem}
+  .guideText b{color:var(--navy)}
+  .guideBtns{display:flex;gap:8px;flex:0 0 auto}
+  .guideBtns button{min-height:38px;font-size:.88rem}
+  .ctl{transition:opacity .2s,box-shadow .2s,border-color .2s}
+  .ctl.spot{border-color:var(--gold);background:#fffcf2;box-shadow:0 0 0 3px rgba(242,169,0,.4)}
+  .ctl.dim{opacity:.45}
+  button.primary.pulse{animation:pulse 1.3s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(242,169,0,.8)}100%{box-shadow:0 0 0 12px rgba(242,169,0,0)}}
+  @media (prefers-reduced-motion:reduce){
+    button.primary.pulse{animation:none;box-shadow:0 0 0 4px rgba(242,169,0,.7)}
+    .ctl{transition:none}
+  }
+
+  /* ---------------- stars and badges ---------------- */
+  .resHead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+  .result .resHead .score{margin:0}
+  .stars{display:flex;gap:3px}
+  .stars svg{width:30px;height:30px}
+  .stars .on{fill:var(--gold);stroke:#c98d00}
+  .stars .off{fill:#fff;stroke:#c9bfa6}
+  .stars svg{animation:starPop .42s cubic-bezier(.3,1.6,.5,1) both}
+  .stars svg:nth-child(2){animation-delay:.13s}
+  .stars svg:nth-child(3){animation-delay:.26s}
+  @keyframes starPop{from{transform:scale(0)}to{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){.stars svg{animation:none}}
+  .newBadges{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-size:.88rem;font-weight:700;color:var(--navy)}
+  .bchip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #e8d79a;
+    border-radius:99px;padding:3px 11px 3px 3px;font-weight:600}
+  .medal{width:28px;height:28px;flex:0 0 auto;border-radius:99px;display:flex;align-items:center;justify-content:center;
+    background:var(--gold);color:var(--navy)}
+  .medal svg{width:17px;height:17px}
+  .medal.locked{background:#e6e2d8;color:#a39d8f}
+  .modalInner .badgeGrid{padding:0}
+  .badgeGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:0;padding:0;list-style:none}
+  .badgeGrid li{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px;margin:0}
+  .badgeGrid li.got{border-color:#e8d79a;background:#fffcf2}
+  .badgeGrid .medal{width:38px;height:38px}
+  .badgeGrid .medal svg{width:22px;height:22px}
+  .badgeGrid b{display:block;color:var(--navy);font-size:.95rem}
+  .badgeGrid li:not(.got) b{color:var(--muted)}
+  .badgeGrid span{font-size:.84rem;color:var(--muted);line-height:1.35}
+  .statRow{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:.9rem;margin:0 0 14px;color:var(--muted)}
+  .statRow b{color:var(--navy);font-variant-numeric:tabular-nums}
+
+  /* ---------------- 3D replay ----------------
+     Laid over the two views rather than full-screen. The iframe is a fixed
+     1300px tall and we can't know where the host page is scrolled, so a
+     full-frame overlay could open half off-screen. The stage is on screen, or
+     one scrollIntoView away, and covering it adds no height. */
+  .replay{position:absolute;inset:0;z-index:10;border-radius:10px;overflow:hidden;background:#cfe6f3}
+  .replay canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  .replay canvas:active{cursor:grabbing}
+  .replayTop{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;gap:8px;
+    padding:10px;pointer-events:none}
+  .replayCap{background:rgba(18,57,92,.86);color:#fff;border-radius:99px;padding:6px 14px;
+    font-weight:700;font-size:.95rem;font-variant-numeric:tabular-nums;max-width:calc(100% - 60px)}
+  .replayCap .st{color:var(--gold);letter-spacing:.06em}
+  .replayTop button{pointer-events:auto;margin-left:auto;background:rgba(255,255,255,.92)}
+  .replayHint{position:absolute;left:0;right:0;bottom:62px;text-align:center;font-size:.82rem;font-weight:600;
+    color:#12395c;text-shadow:0 1px 0 rgba(255,255,255,.8);pointer-events:none}
+  .replayBar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:center;
+    flex-wrap:wrap;padding:10px}
+  .replayBar button{background:rgba(255,255,255,.94);min-height:40px}
+  .replayBar button.primary{background:var(--navy);color:#fff}
+  .replayBtn{flex:0 0 auto}
+  @media (max-width:560px){
+    .replayBar{flex-wrap:nowrap;gap:6px;padding:8px}
+    .replayBar button{flex:1 1 0;min-width:0;min-height:36px;padding:0 6px;font-size:.8rem}
+    .replayHint{bottom:52px}
+    .replayCap{font-size:.84rem;padding:5px 11px}
+  }
+
   /* ================= PHONE / NARROW ================= */
   @media (max-width:860px){
     body{padding:16px 10px 30px}
@@ -332,6 +459,27 @@
           stroke-width="2.6" stroke-linecap="round"/>
     <circle cx="12" cy="18.6" r="1.5" fill="currentColor"/>
   </symbol>
+  <!-- badge shelf button -->
+  <symbol id="medal" viewBox="0 0 24 24">
+    <path d="M7,2 L10.5,9 M17,2 L13.5,9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <circle cx="12" cy="15" r="6.2" fill="currentColor"/>
+    <path d="M12,11.6 L13,14 L15.4,14.1 L13.5,15.6 L14.2,18 L12,16.6 L9.8,18 L10.5,15.6 L8.6,14.1 L11,14 Z" fill="#fff"/>
+  </symbol>
+  <!-- one glyph per badge, drawn on a coloured disc -->
+  <symbol id="b-first" viewBox="0 0 24 24"><g fill="currentColor">
+    <ellipse cx="8.5" cy="9" rx="2.6" ry="3.8"/><ellipse cx="8.5" cy="15.4" rx="1.9" ry="2.4"/>
+    <ellipse cx="15.5" cy="6.4" rx="2.6" ry="3.8"/><ellipse cx="15.5" cy="12.8" rx="1.9" ry="2.4"/></g></symbol>
+  <symbol id="b-bull" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2">
+    <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/></g><circle cx="12" cy="12" r="1.8" fill="currentColor"/></symbol>
+  <symbol id="b-ccw" viewBox="0 0 24 24"><path d="M18.4,15.2 A7.2,7.2 0 1 1 17.2,6.9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M13.2,5.4 L19.6,3.8 L18.6,10.2 Z" fill="currentColor"/></symbol>
+  <symbol id="b-wrap" viewBox="0 0 24 24"><text x="12" y="16.2" text-anchor="middle" font-size="10.5" font-weight="800"
+    font-family="system-ui,sans-serif" fill="currentColor">360</text></symbol>
+  <symbol id="b-solo" viewBox="0 0 24 24"><path d="M4.5,12.5 L9.5,17.5 L19.5,6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="b-shape" viewBox="0 0 24 24"><path d="M12,3 L19.8,7.5 L19.8,16.5 L12,21 L4.2,16.5 L4.2,7.5 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></symbol>
+  <symbol id="b-streak" viewBox="0 0 24 24"><path d="M12,2.5 C13,7 17.5,8.5 17.5,14 A5.5,5.5 0 0 1 6.5,14 C6.5,11 8.5,9.5 9,7.5 C10.5,9 10.5,10.5 11,11.5 C12.5,9 12.5,6 12,2.5 Z" fill="currentColor"/></symbol>
+  <symbol id="play" viewBox="0 0 24 24"><path d="M7,4.5 L19.5,12 L7,19.5 Z" fill="currentColor"/></symbol>
+  <symbol id="b-expert" viewBox="0 0 24 24"><path d="M12,2.8 L14.7,8.6 L21,9.3 L16.3,13.6 L17.6,19.9 L12,16.7 L6.4,19.9 L7.7,13.6 L3,9.3 L9.3,8.6 Z" fill="currentColor"/></symbol>
 </svg>
 
 <div id="cover" class="cover">
@@ -346,6 +494,15 @@
       <button class="iconBtn" id="coverSettingsBtn" type="button" aria-haspopup="dialog"
               title="Settings" aria-label="Settings"><svg class="ic"><use href="#gear"/></svg></button>
     </div>
+    <fieldset class="level" id="levelCover">
+      <legend>Choose your level</legend>
+      <div class="levelBtns">
+        <label><input type="radio" name="levelCover" value="beginner" autocomplete="off"><span><b>Beginner</b><small>Coaching on</small></span></label>
+        <label><input type="radio" name="levelCover" value="scout" autocomplete="off"><span><b>Scout</b><small>You do the math</small></span></label>
+        <label><input type="radio" name="levelCover" value="expert" autocomplete="off"><span><b>Expert</b><small>No helpers</small></span></label>
+      </div>
+      <p class="levelNote" id="levelNoteCover" aria-live="polite"></p>
+    </fieldset>
   </div>
 </div>
 
@@ -354,10 +511,15 @@
   <!-- inert until PLAY, so nothing behind the cover can be reached by tabbing -->
   <section class="panel" id="gamePanel" tabindex="-1" inert>
     <div class="panelBar">
-      <button class="iconBtn" id="helpBtn" type="button" aria-haspopup="dialog"
-              title="How to play" aria-label="How to play"><svg class="ic"><use href="#help"/></svg></button>
-      <button class="iconBtn" id="settingsBtn" type="button" aria-haspopup="dialog"
-              title="Settings" aria-label="Settings"><svg class="ic"><use href="#gear"/></svg></button>
+      <span class="levelChip" id="levelChip"></span>
+      <span class="barBtns">
+        <button class="badgeBtn" id="badgeBtn" type="button" aria-haspopup="dialog" title="Your badges">
+          <svg class="ic"><use href="#medal"/></svg><span id="badgeCount">0</span><span class="sr"> badges earned. Open badges</span></button>
+        <button class="iconBtn" id="helpBtn" type="button" aria-haspopup="dialog"
+                title="How to play" aria-label="How to play"><svg class="ic"><use href="#help"/></svg></button>
+        <button class="iconBtn" id="settingsBtn" type="button" aria-haspopup="dialog"
+                title="Settings" aria-label="Settings"><svg class="ic"><use href="#gear"/></svg></button>
+      </span>
     </div>
 
     <!-- ============ STAGE ============ -->
@@ -378,6 +540,20 @@
         <svg id="field" viewBox="-138 -140 276 280" role="img"
              aria-label="Top-down view of the field showing your starting stick and the path you have walked."></svg>
       </div>
+
+      <!-- 3D replay, drawn over both views once a round is finished -->
+      <div class="replay" id="replay" role="region" aria-label="3D replay of your walk" hidden>
+        <div class="replayTop">
+          <span class="replayCap" id="replayCap" aria-live="polite"></span>
+          <button class="iconBtn" id="replayClose" type="button" aria-label="Close the replay">&times;</button>
+        </div>
+        <div class="replayHint" id="replayHint" hidden>Drag to look around</div>
+        <div class="replayBar">
+          <button type="button" id="replayAgain">Replay</button>
+          <button type="button" id="replaySkip">Skip ahead</button>
+          <button type="button" class="primary" id="replayDone">Done</button>
+        </div>
+      </div>
     </div>
 
     <div class="swapWrap">
@@ -389,8 +565,18 @@
     <div class="controls">
       <div class="step" id="stepBox" aria-live="polite"></div>
 
+      <!-- only shown during the guided first round -->
+      <div class="guide" id="guideBox" hidden>
+        <span class="guideNum" id="guideNum" aria-hidden="true">1</span>
+        <div class="guideText" id="guideText" aria-live="polite"></div>
+        <div class="guideBtns">
+          <button type="button" id="guideNext" hidden></button>
+          <button type="button" class="ghost" id="guideSkip">Skip the guide</button>
+        </div>
+      </div>
+
       <div class="ctl-grid">
-        <div class="ctl">
+        <div class="ctl" id="ctlDial">
           <span class="ctl-label">Step 1 &middot; Turn the dial to your desired bearing</span>
           <span class="ctl-sub">Just the numbered ring turns &mdash; you stay facing the same way.</span>
           <div class="btn-row">
@@ -406,7 +592,7 @@
           </div>
         </div>
 
-        <div class="ctl">
+        <div class="ctl" id="ctlFace">
           <span class="ctl-label">Step 2 &middot; Turn yourself until the needle lines up</span>
           <span class="ctl-sub">Put red in the shed. Turn the whole compass but keep the bearing set.</span>
           <div class="btn-row">
@@ -430,6 +616,8 @@
       <div class="actions">
         <button class="primary" id="walkBtn" type="button">Walk 100 feet</button>
         <button class="ghost" id="resetBtn" type="button">Start over</button>
+        <button class="replayBtn" id="replayBtn" type="button" hidden>
+          <svg class="ic" aria-hidden="true"><use href="#play"/></svg><span>Watch in 3D</span></button>
       </div>
 
       <div class="result" id="result" aria-live="polite"></div>
@@ -470,16 +658,36 @@
       <li>Or use the <b>arrow buttons</b> under each step.</li>
     </ul>
 
-    <h3>Too hard?</h3>
-    <p>The <b>gear button</b> at the top has a <b>Make it easier</b> section that gives you coaching while
-      you line up. It will also work out the bearing math for you. Switch them off once you've got
-      the hang of it!</p>
+    <h3>Too hard? Too easy?</h3>
+    <p>Pick <b>Beginner</b>, <b>Scout</b> or <b>Expert</b> on the title screen, or any time from the
+      <b>gear button</b>. Beginner coaches you while you line up and works out the bearing math for you.
+      Your first round is a guided one on Beginner and Scout.</p>
+
+    <h3>Stars and badges</h3>
+    <p>Finish within 10 feet of your stick for <b>3 stars</b>, 25 feet for 2, and 50 feet for 1.
+      Special challenges earn badges. Tap the <b>medal button</b> to see them all.</p>
 
     <p class="helpNote">The needle always points north &mdash; it never moves. The compass turns
       around it, exactly as it would in your hands.</p>
 
     <div class="modalFoot">
       <button class="primary" value="close">Got it</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============ BADGES (hidden until the medal button is pressed) ============ -->
+<dialog class="modal" id="badgeModal" aria-labelledby="badgeTitle">
+  <form method="dialog" class="modalInner">
+    <div class="modalHead">
+      <h2 id="badgeTitle">Your badges</h2>
+      <button class="iconBtn" value="close" aria-label="Close badges">&times;</button>
+    </div>
+    <div class="statRow" id="statRow"></div>
+    <ul class="badgeGrid" id="badgeGrid"></ul>
+    <p class="field-note" id="badgeNote"></p>
+    <div class="modalFoot">
+      <button class="primary" value="close">Back to the game</button>
     </div>
   </form>
 </dialog>
@@ -496,6 +704,16 @@
       <h2 id="settingsTitle">Settings</h2>
       <button class="iconBtn" value="close" aria-label="Close settings">&times;</button>
     </div>
+
+    <fieldset class="level inModal">
+      <legend class="ctl-label">Level</legend>
+      <div class="levelBtns">
+        <label><input type="radio" name="levelSet" value="beginner" autocomplete="off"><span><b>Beginner</b><small>Coaching on</small></span></label>
+        <label><input type="radio" name="levelSet" value="scout" autocomplete="off"><span><b>Scout</b><small>You do the math</small></span></label>
+        <label><input type="radio" name="levelSet" value="expert" autocomplete="off"><span><b>Expert</b><small>No helpers</small></span></label>
+      </div>
+      <p class="levelNote field-note" id="levelNoteSet"></p>
+    </fieldset>
 
     <div class="settings-grid">
       <div class="ctl">
@@ -518,6 +736,12 @@
         <label class="chk"><input type="checkbox" id="showHints" autocomplete="off"> Coach me while I line up</label>
         <label class="chk"><input type="checkbox" id="showMath" autocomplete="off"> Show me the bearing math</label>
         <label class="chk"><input type="checkbox" id="showFace" autocomplete="off" checked> Show the degrees I'm facing</label>
+        <label class="chk"><input type="checkbox" id="snapOn" autocomplete="off" checked> Snap into line when I'm close</label>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Sound</span>
+        <label class="chk"><input type="checkbox" id="soundOn" autocomplete="off" checked> Sounds and vibration</label>
+        <div class="field-note">Vibration works on most Android phones, not on iPhones.</div>
       </div>
     </div>
 
@@ -627,9 +851,132 @@ const S = {
   used: [],
   sloppyIdx: 2,
   showFace: true, showMath: false, showHints: false,   // both crutches start off
+  snap: true, sound: true,
+  preset: "scout",
+  guided: false,          // the walkthrough round; decided when PLAY is pressed
+  guideDialOK: false,     // leg 1 only: they've settled on a starting bearing
   bigView: "field",
   started: false,                     // false while the title cover is up
   animating: false, finished: false
+};
+
+/* ============================================================================
+   LEVELS
+   Each preset is just a bundle of the gear-menu settings. Touch any of those
+   settings by hand and the level reads as "Custom" — nothing is locked.
+   ============================================================================ */
+const PRESETS = {
+  beginner: { name: "Beginner", sloppyIdx: 1, showHints: true,  showMath: true,  showFace: true,  snap: true,
+    note: "Coaching while you line up, the bearing math worked out for you, and extra-steady hands." },
+  scout:    { name: "Scout",    sloppyIdx: 2, showHints: false, showMath: false, showFace: true,  snap: true,
+    note: "You do the bearing math. Realistic wobble, just like a real field. The classic game." },
+  expert:   { name: "Expert",   sloppyIdx: 2, showHints: false, showMath: false, showFace: false, snap: false,
+    note: "No degree readout and no snapping — read the compass itself. No guided round." }
+};
+const PRESET_KEYS = ["sloppyIdx", "showHints", "showMath", "showFace", "snap"];
+const matchPreset = () =>
+  Object.keys(PRESETS).find(id => PRESET_KEYS.every(k => PRESETS[id][k] === S[k])) || "custom";
+
+/* The guided round switches every helper on without touching the settings, so
+   when it ends the player lands on exactly the level they picked. */
+const coachOn = () => S.showHints || S.guided;
+const mathOn  = () => S.showMath  || S.guided;
+const faceOn  = () => S.showFace  || S.guided;
+
+/* ============================================================================
+   BADGES AND STATS
+   ============================================================================ */
+const BADGES = [
+  { id: "first",  name: "First steps",        desc: "Finish your first round." },
+  { id: "bull",   name: "Bullseye",           desc: "Finish within 3 feet of your stick." },
+  { id: "ccw",    name: "Other way round",    desc: "Close the loop turning counter-clockwise." },
+  { id: "wrap",   name: "Wrap-around",        desc: "Get a bearing right that goes past 360° or below 0°." },
+  { id: "solo",   name: "No training wheels", desc: "Earn 2 or more stars with coaching and math help off." },
+  { id: "shape",  name: "Shape shifter",      desc: "Earn 2 or more stars walking a square, pentagon or hexagon." },
+  { id: "streak", name: "On a roll",          desc: "Earn 3 stars two rounds in a row." },
+  { id: "expert", name: "Trail boss",         desc: "Earn 3 stars at Expert level." }
+];
+const STATS = { rounds: 0, best: null, stars: 0, lastWasThree: false, badges: [] };
+
+/* Storage is a bonus, never a requirement. Inside the recommended sandboxed
+   iframe (no allow-same-origin) localStorage throws, so badges simply last for
+   the visit. Opened directly, or embedded with allow-same-origin, they stick. */
+const STORE_KEY = "scoutlife-compass-game-v1";
+const store = (() => {
+  try { const k = "__cg"; localStorage.setItem(k, "1"); localStorage.removeItem(k); return localStorage; }
+  catch (_) { return null; }
+})();
+function loadSaved() {
+  if (!store) return;
+  try {
+    const d = JSON.parse(store.getItem(STORE_KEY) || "null");
+    if (!d || typeof d !== "object") return;
+    if (Number.isFinite(d.rounds)) STATS.rounds = Math.max(0, d.rounds | 0);
+    if (Number.isFinite(d.best)) STATS.best = d.best;
+    if (Number.isFinite(d.stars)) STATS.stars = Math.max(0, d.stars | 0);
+    STATS.lastWasThree = !!d.lastWasThree;
+    if (Array.isArray(d.badges)) STATS.badges = d.badges.filter(id => BADGES.some(b => b.id === id));
+    if (typeof d.sound === "boolean") S.sound = d.sound;
+    if (d.preset in PRESETS) Object.assign(S, pick(PRESETS[d.preset]), { preset: d.preset });
+  } catch (_) { /* a corrupt save is just ignored */ }
+}
+function save() {
+  if (!store) return;
+  try {
+    store.setItem(STORE_KEY, JSON.stringify({ ...STATS, sound: S.sound,
+      preset: S.preset in PRESETS ? S.preset : undefined }));
+  } catch (_) {}
+}
+function pick(p) { const o = {}; PRESET_KEYS.forEach(k => { o[k] = p[k]; }); return o; }
+
+/* ============================================================================
+   SOUND AND VIBRATION
+   Synthesised with Web Audio, so there are no sound files to ship. The context
+   is created on the first tap (PLAY), which is what browsers require.
+   ============================================================================ */
+const sfx = (() => {
+  let ctx = null;
+  const ac = () => {
+    if (!S.sound) return null;
+    try {
+      if (!ctx) {
+        const A = window.AudioContext || window.webkitAudioContext;
+        if (!A) return null;
+        ctx = new A();
+      }
+      if (ctx.state === "suspended") ctx.resume();
+      return ctx;
+    } catch (_) { return null; }
+  };
+  const tone = (freq, dur, { type = "triangle", gain = .12, at = 0, slide = 0 } = {}) => {
+    const c = ac(); if (!c) return;
+    const t = c.currentTime + at;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+    g.gain.setValueAtTime(.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + .006);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + dur + .03);
+  };
+  return {
+    unlock: () => { ac(); },
+    click: () => { tone(2200, .03, { type: "square", gain: .035 }); tone(1100, .07, { gain: .09, at: .008 }); },
+    chime: n => [523.25, 659.25, 783.99].slice(0, n).forEach((f, i) =>
+      tone(f, .42, { type: "sine", gain: .12, at: i * .14 })),
+    miss:  () => tone(330, .35, { type: "sine", gain: .09, slide: .7 }),
+    badge: () => [1046.5, 1318.5, 1568].forEach((f, i) =>
+      tone(f, .28, { type: "triangle", gain: .07, at: .55 + i * .08 }))
+  };
+})();
+/* Chrome ignores vibrate() inside cross-origin iframes and iOS has no vibrate at
+   all, so this is a nicety that works when it works and is silent otherwise. */
+const buzz = ms => {
+  if (!S.sound) return;
+  try { if (navigator.vibrate && navigator.userActivation?.hasBeenActive !== false) navigator.vibrate(ms); }
+  catch (_) {}
 };
 
 /* Either direction closes the loop — clockwise or anticlockwise trace the same
@@ -1070,17 +1417,22 @@ const setText = (n, t) => { if (n.textContent !== t) n.textContent = t; };
 const setAttr = (n, k, v) => { const t = String(v); if (n.getAttribute(k) !== t) n.setAttribute(k, t); };
 const setClass = (n, c) => { if (n.className !== c) n.className = c; };
 
+let wasAligned = false;
 function syncUI() {
   setVal("dialInput", S.dial);
   setVal("faceInput", faceDeg());
-  const vis = S.showFace ? "" : "hidden";
+  const vis = faceOn() ? "" : "hidden";
   if ($("faceOutRow").style.visibility !== vis) $("faceOutRow").style.visibility = vis;
 
   const ok = aligned(), st = $("alignStatus");
+  // A click the moment red drops into the shed: the sound says "stop turning"
+  // before the eye has caught up, which is most of what makes lining up easy.
+  if (ok && !wasAligned && S.started && !S.finished && !S.animating) { sfx.click(); buzz(15); }
+  wasAligned = ok;
   if (ok) {
     setClass(st, "status yes");
     setText(st.lastElementChild, "Red is in the shed — you're lined up");
-  } else if (S.showHints) {
+  } else if (coachOn()) {
     // Signed error, not the needle's reading against the dial. The dial reading
     // wraps — two degrees past the bearing shows as 358, which looks like you
     // are nowhere near when you are almost there. This says how far and which way.
@@ -1118,7 +1470,7 @@ function syncUI() {
       ? `Add <em>or</em> subtract ${S.turn}&deg; &mdash; on this leg either one works.`
       : `Turn the same way you did last time &mdash; another ${S.turn}&deg;.`;
 
-    if (S.showMath) {
+    if (mathOn()) {
       const sum = d => {
         const raw = prev + d * S.turn, res = norm(raw);
         let t = `${prev}&deg; ${d > 0 ? "+" : "&minus;"} ${S.turn}&deg; = ${raw}&deg;`;
@@ -1132,19 +1484,88 @@ function syncUI() {
       h += ` If you go over 360&deg;, subtract 360. If you drop below 0&deg;, add 360.`;
     }
     html = h;
-    if (S.showHints && !exps.includes(S.dial)) {
+    // In the guided round the guide box already says "set the dial to X", so
+    // a red warning on top of it would read as a telling-off, not help.
+    if (coachOn() && !S.guided && !exps.includes(S.dial)) {
       html += `<div class="warn">Your dial says ${S.dial}&deg;. Double-check that math — you can ` +
               `still walk it, but you probably won't find your stick.</div>`;
     }
   }
   if (html !== stepHTML) { stepHTML = html; $("stepBox").innerHTML = html; }
+  // Once the round is over the result panel says it all; hiding the prompt
+  // also buys back the height the stars and badges need inside the iframe.
+  if ($("stepBox").hidden !== S.finished) $("stepBox").hidden = S.finished;
+  if (st.hidden !== S.finished) st.hidden = S.finished;
 
   const wb = $("walkBtn");
-  wb.disabled = S.finished || S.animating || !ok;
-  setText(wb, S.finished ? "Round complete" : `Walk ${LEG_FT} feet`);
+  wb.disabled = S.animating || (!S.finished && !ok);
+  setText(wb, S.finished ? "Play again" : `Walk ${LEG_FT} feet`);
+  $("resetBtn").hidden = S.finished;
 
+  syncGuide();
+  syncLevelChip();
+  replay.syncBtn();
   drawCompass();
   renderField();
+}
+
+/* ============================================================================
+   GUIDED FIRST ROUND
+   The phase is worked out from the game state every time rather than stored,
+   so it can never fall out of step with what's on screen — undo a step and the
+   guide simply steps back with you.
+   ============================================================================ */
+function guidePhase() {
+  if (!S.guided || S.finished || !S.started) return null;
+  if (S.animating) return "wait";
+  const needDial = S.leg === 0 ? !S.guideDialOK : !expectedBearings().includes(S.dial);
+  if (needDial) return "dial";
+  return aligned() ? "walk" : "turn";
+}
+let guideHTML = null;
+function syncGuide() {
+  const phase = guidePhase(), box = $("guideBox");
+  const show = phase !== null;
+  if (box.hidden === show) box.hidden = !show;
+
+  const cd = $("ctlDial"), cf = $("ctlFace"), wb = $("walkBtn");
+  setClass(cd, "ctl" + (phase === "dial" ? " spot" : phase === "turn" || phase === "walk" ? " dim" : ""));
+  setClass(cf, "ctl" + (phase === "turn" ? " spot" : phase === "dial" || phase === "walk" ? " dim" : ""));
+  wb.classList.toggle("pulse", phase === "walk");
+  if (!show || phase === "wait") return;
+
+  const num = { dial: "1", turn: "2", walk: "3" }[phase];
+  let html, next = "";
+  if (phase === "dial" && S.leg === 0) {
+    html = `<b>Set the dial.</b> Any bearing works for your first leg. Twist the numbered ring, ` +
+           `or use the Step 1 arrows. Happy with ${S.dial}&deg;?`;
+    next = `Use ${S.dial}°`;
+  } else if (phase === "dial") {
+    const exps = expectedBearings();
+    html = `<b>Set the dial to your new bearing:</b> ` +
+           exps.map(v => `<span class="math">${v}&deg;</span>`).join(" or ") +
+           `. The math is worked out for you above.`;
+  } else if (phase === "turn") {
+    html = `<b>Now turn yourself.</b> Leave the dial at ${S.dial}&deg;. Twist the clear baseplate, ` +
+           `or use the Step 2 arrows, until the red needle sits inside the red shed.`;
+  } else {
+    html = `<b>Red is in the shed!</b> Press <b>Walk ${LEG_FT} feet</b>.`;
+  }
+  setText($("guideNum"), num);
+  if (html !== guideHTML) { guideHTML = html; $("guideText").innerHTML = html; }
+  const nb = $("guideNext");
+  nb.hidden = !next;
+  if (next) setText(nb, next);
+}
+$("guideNext").addEventListener("click", () => { S.guideDialOK = true; syncUI(); });
+$("guideSkip").addEventListener("click", () => { S.guided = false; syncUI(); });
+
+function syncLevelChip() {
+  const name = S.preset in PRESETS ? PRESETS[S.preset].name : "Custom";
+  // literal "·", not &middot;, so the innerHTML read-back compares equal
+  const html = `Level: <b>${name}</b>` + (S.guided ? " · guided round" : "");
+  const c = $("levelChip");
+  if (c.innerHTML !== html) c.innerHTML = html;
 }
 
 /* ============================================================================
@@ -1178,7 +1599,10 @@ function swingToNorth() {
 }
 
 function walk() {
+  if (S.finished && !S.animating) { reset(); return; }   // the button reads "Play again"
   if (S.animating || S.finished || !aligned()) return;
+  snapGen++;                                              // a snap mid-flight gives way
+  replay.load();       // fetch Three.js in the background now they're playing for real
   S.animating = true;
   S.used.push(S.dial);
 
@@ -1263,24 +1687,100 @@ function showResult() {
   const list = spare.length > 1
     ? spare.slice(0, -1).join(", ") + " and " + spare[spare.length - 1]
     : spare[0];
-  const tip = (d > 25 && spare.length)
-    ? `<div class="tip">Tricky one? The <b>gear button</b> at the top has a <b>Make it easier</b> ` +
-      `section &mdash; ${list}.</div>`
+  const levelName = S.preset in PRESETS ? PRESETS[S.preset].name : "your custom";
+  let tip = "";
+  if (S.guided) {
+    tip = `<div class="tip">That was your guided round. Press <b>Play again</b> to go it alone ` +
+          `at <b>${levelName}</b> level.</div>`;
+  } else if (d > 25 && spare.length) {
+    tip = `<div class="tip">Tricky one? Switch to <b>Beginner</b> with the <b>gear button</b> ` +
+          `for ${list}.</div>`;
+  }
+
+  /* ---- stars and badges ---- */
+  const stars = starsFor(d);
+  const fair = S.sloppyIdx > 0;               // "Perfect robot" can't miss, so it can't
+                                              // earn the accuracy badges either
+  const helpersOff = !S.guided && !S.showHints && !S.showMath;
+  const wrapped = S.used.some((b, i) => {
+    if (i === 0 || !expectedBearings(i, dir).includes(b)) return false;
+    const prev = S.used[i - 1];
+    const raw = norm(b - prev) === norm(S.turn) ? prev + S.turn : prev - S.turn;
+    return raw >= 360 || raw < 0;
+  });
+  const earned = [
+    ["first",  true],
+    ["bull",   fair && d < 3],
+    ["ccw",    mathOK && dir === -1 && stars >= 1],
+    ["wrap",   wrapped],
+    ["solo",   fair && helpersOff && stars >= 2],
+    ["shape",  fair && S.legs >= 4 && stars >= 2],
+    ["streak", fair && stars === 3 && STATS.lastWasThree],
+    ["expert", S.preset === "expert" && stars === 3]
+  ].filter(([, ok]) => ok).map(([id]) => id);
+  const fresh = earned.filter(id => !STATS.badges.includes(id));
+  STATS.badges.push(...fresh);
+  STATS.rounds++;
+  STATS.stars += stars;
+  STATS.best = STATS.best === null ? d : Math.min(STATS.best, d);
+  STATS.lastWasThree = stars === 3;
+  save();
+  syncBadgeCount();
+
+  const badgeRow = fresh.length
+    ? `<div class="newBadges">New badge${fresh.length > 1 ? "s" : ""}: ` +
+      fresh.map(id => badgeChip(BADGES.find(b => b.id === id))).join("") + `</div>`
     : "";
 
   const box = $("result");
   box.className = "result show rank-" + rank;
   box.innerHTML =
-    `<div class="score">${d.toFixed(1)} feet from your stick</div>` +
+    `<div class="resHead"><div class="score">${d.toFixed(1)} feet from your stick</div>` +
+    starRow(stars) + `</div>` +
     `<div><b>${head}</b> ${msg}</div>` +
     (mathOK ? "" : `<div class="warn">Your bearing math slipped on at least one leg — that's the biggest miss here, not your walking.</div>`) +
+    badgeRow +
     `<div class="recap">Bearings you used, after walking ${LEG_FT * S.legs} feet total:` +
     `<table>${rows}</table></div>` + tip;
+
+  if (stars) sfx.chime(stars); else sfx.miss();
+  if (fresh.length) sfx.badge();
+  if (stars === 3) buzz([30, 70, 30]);
+
+  S.guided = false;                         // the walkthrough is a one-time thing
+}
+
+const starsFor = d => d < 10 ? 3 : d < 25 ? 2 : d < 50 ? 1 : 0;
+const STAR_PATH = "M12,2.8 L14.7,8.6 L21,9.3 L16.3,13.6 L17.6,19.9 L12,16.7 L6.4,19.9 L7.7,13.6 L3,9.3 L9.3,8.6 Z";
+const starRow = n => `<div class="stars" role="img" aria-label="${n} of 3 stars">` +
+  [0, 1, 2].map(i => `<svg viewBox="0 0 24 24" aria-hidden="true"><path class="${i < n ? "on" : "off"}" ` +
+    `stroke-width="1.5" stroke-linejoin="round" d="${STAR_PATH}"/></svg>`).join("") + `</div>`;
+const medal = (id, got = true) =>
+  `<span class="medal${got ? "" : " locked"}" aria-hidden="true"><svg><use href="#b-${id}"/></svg></span>`;
+const badgeChip = b => `<span class="bchip">${medal(b.id)}${b.name}</span>`;
+
+function syncBadgeCount() { setText($("badgeCount"), String(STATS.badges.length)); }
+function renderBadgeModal() {
+  const best = STATS.best === null ? "—" : `${STATS.best.toFixed(1)} ft`;
+  $("statRow").innerHTML =
+    `<span>Rounds <b>${STATS.rounds}</b></span><span>Stars <b>${STATS.stars}</b></span>` +
+    `<span>Closest finish <b>${best}</b></span>` +
+    `<span>Badges <b>${STATS.badges.length} of ${BADGES.length}</b></span>`;
+  $("badgeGrid").innerHTML = BADGES.map(b => {
+    const got = STATS.badges.includes(b.id);
+    return `<li class="${got ? "got" : ""}">${medal(b.id, got)}<div><b>${b.name}</b>` +
+           `<span>${got ? "" : "Locked. "}${b.desc}</span></div></li>`;
+  }).join("");
+  $("badgeNote").textContent = store
+    ? "Your badges are saved on this device."
+    : "Badges last until you close or reload this page.";
 }
 
 function reset() {
   S.leg = 0; S.pos = { x: 0, y: 0 }; S.trail = [{ x: 0, y: 0 }];
   S.used = []; S.finished = false; S.animating = false;
+  S.guideDialOK = false; guideHTML = null; snapGen++;
+  replay.hide(false);
   S.facing = 0; animGen++;                  // abandons any animation in flight
   gPrints.textContent = ""; printCount = 0;
   fieldKey = stepHTML = null;               // furniture and prompt rebuilt after a reset
@@ -1292,24 +1792,57 @@ function reset() {
    CONTROLS
    ============================================================================ */
 function setDial(v) { S.dial = norm(Math.round(v)); syncUI(); }
-function setFace(v) { S.facing = norm(v); syncUI(); }
+function setFace(v) {
+  snapGen++;                                // the player's hand beats the snap
+  // Leg 1 of the guided round: turning yourself means they've settled on a bearing
+  if (S.guided && S.leg === 0) S.guideDialOK = true;
+  S.facing = norm(v); syncUI();
+}
 
-function holdable(btn, fn) {
-  let to = null, iv = null;
-  const stop = () => { clearTimeout(to); clearInterval(iv); to = iv = null; };
+/* ---- snap ------------------------------------------------------------------
+   When a turn gesture ends within SNAP_TOL of the bearing, ease the rest of the
+   way in. The tolerance for walking is still ALIGN_TOL; this only removes the
+   fiddly last couple of degrees on a touchscreen. Its own generation counter,
+   separate from animGen, so a snap never cancels a walk or vice versa. */
+const SNAP_TOL = 5;
+let snapGen = 0;
+function maybeSnap() {
+  if (!S.snap || !S.started || S.finished || S.animating) return;
+  const off = ((S.dial - S.facing + 540) % 360) - 180;
+  if (Math.abs(off) > SNAP_TOL || Math.abs(off) < .05) return;
+  const from = S.facing, mine = ++snapGen;
+  if (REDUCED.matches) { S.facing = norm(S.dial); syncUI(); return; }
+  const t0 = performance.now(), DUR = 180;
+  (function step(now) {
+    if (mine !== snapGen) return;
+    const u = Math.min(1, (now - t0) / DUR), e = 1 - Math.pow(1 - u, 3);
+    S.facing = norm(from + off * e);
+    syncUI();
+    if (u < 1) requestAnimationFrame(step); else { S.facing = norm(S.dial); syncUI(); }
+  })(t0);
+}
+
+function holdable(btn, fn, after) {
+  let to = null, iv = null, held = false;
+  const stop = () => {
+    clearTimeout(to); clearInterval(iv); to = iv = null;
+    if (held && after) after();
+    held = false;
+  };
   btn.addEventListener("pointerdown", e => {
     e.preventDefault();
     try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    held = true;
     fn();
     to = setTimeout(() => { iv = setInterval(fn, 60); }, 350);
   });
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => btn.addEventListener(ev, stop));
-  btn.addEventListener("click", e => { if (e.detail === 0) fn(); });   // keyboard
+  btn.addEventListener("click", e => { if (e.detail === 0) { fn(); if (after) after(); } });   // keyboard
 }
 document.querySelectorAll("[data-dial]").forEach(b =>
   holdable(b, () => setDial(S.dial + Number(b.dataset.dial))));
 document.querySelectorAll("[data-face]").forEach(b =>
-  holdable(b, () => setFace(faceDeg() + Number(b.dataset.face))));
+  holdable(b, () => setFace(faceDeg() + Number(b.dataset.face)), maybeSnap));
 
 const numeric = (id, apply) => {
   $(id).addEventListener("input", e => {
@@ -1378,7 +1911,11 @@ $("resetBtn").addEventListener("click", reset);
     else setDial(S.dial - d);
   });
   ["pointerup", "pointercancel"].forEach(ev =>
-    cSvg.addEventListener(ev, () => { mode = null; ctm = null; }));
+    cSvg.addEventListener(ev, () => {
+      const turned = mode === "plate" || mode === "swipe";
+      mode = null; ctm = null;
+      if (turned) maybeSnap();             // twisting the ring moves the dial, not you
+    }));
   // the mapping changes if the drawing is resized or moved between views
   onMQ(NARROW, () => { ctm = null; });
   window.addEventListener("resize", () => { ctm = null; });
@@ -1419,6 +1956,7 @@ $("resetBtn").addEventListener("click", reset);
         if (Math.hypot(dx, dy) > 4) setFace(Math.atan2(dx, dy) * 180 / Math.PI);
       }
     }
+    maybeSnap();
   });
   fSvg.addEventListener("pointercancel", () => { active = false; });
 
@@ -1428,19 +1966,41 @@ $("resetBtn").addEventListener("click", reset);
 })();
 
 /* ---- settings ---------------------------------------------------------- */
-$("sloppy").addEventListener("input", e => {
-  S.sloppyIdx = Number(e.target.value);
+function sloppyNote() {
   const s = SLOPPY[S.sloppyIdx];
   $("sloppyNote").innerHTML = `<b>${s.name}.</b> ${s.note}`;
+}
+/* Any hand-made change re-derives the level, so switching Beginner's coaching
+   off shows as "Custom" rather than quietly still claiming to be Beginner. */
+function settingChanged() {
+  S.preset = matchPreset();
+  syncSettingsUI(); save(); syncUI();
+}
+$("sloppy").addEventListener("input", e => {
+  S.sloppyIdx = Number(e.target.value);
+  sloppyNote(); settingChanged();
 });
 $("legsSel").addEventListener("change", e => {
   S.legs = Number(e.target.value);
   S.turn = 360 / S.legs;
   reset();
 });
-$("showHints").addEventListener("change", e => { S.showHints = e.target.checked; syncUI(); });
-$("showFace").addEventListener("change", e => { S.showFace = e.target.checked; syncUI(); });
-$("showMath").addEventListener("change", e => { S.showMath = e.target.checked; syncUI(); });
+[["showHints", "showHints"], ["showFace", "showFace"], ["showMath", "showMath"], ["snapOn", "snap"]]
+  .forEach(([id, key]) => $(id).addEventListener("change", e => { S[key] = e.target.checked; settingChanged(); }));
+$("soundOn").addEventListener("change", e => {
+  S.sound = e.target.checked; save();
+  if (S.sound) { sfx.unlock(); sfx.click(); }     // a sample, so they know it's on
+});
+
+function applyPreset(id) {
+  if (!(id in PRESETS)) return;
+  Object.assign(S, pick(PRESETS[id]));
+  S.preset = id;
+  if (id === "expert") S.guided = false;          // experts skip the walkthrough
+  sloppyNote(); syncSettingsUI(); save(); syncUI();
+}
+document.querySelectorAll('input[name="levelCover"],input[name="levelSet"]').forEach(r =>
+  r.addEventListener("change", () => { if (r.checked) applyPreset(r.value); }));
 
 /* ---- title cover ------------------------------------------------------- */
 function startGame() {
@@ -1448,6 +2008,10 @@ function startGame() {
   document.body.classList.add("playing");
   const panel = $("gamePanel");
   panel.removeAttribute("inert");
+  sfx.unlock();                             // PLAY is the tap that lets audio start
+  // First visit only, and not for experts. With storage available a returning
+  // player who has already finished a round skips it too.
+  S.guided = S.preset !== "expert" && STATS.rounds === 0;
   S.started = true;
   applyLayout();
   syncUI();
@@ -1460,12 +2024,15 @@ const openModal = m => {
   if (m.showModal) m.showModal();
   else m.setAttribute("open", "");            // very old browsers: inline fallback
 };
-[["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"],
+[["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"], ["badgeBtn", "badgeModal"],
  ["coverHelpBtn", "helpModal"], ["coverSettingsBtn", "settingsModal"]].forEach(([btn, dlg]) => {
-  $(btn).addEventListener("click", () => openModal($(dlg)));
+  $(btn).addEventListener("click", () => {
+    if (dlg === "badgeModal") renderBadgeModal();
+    openModal($(dlg));
+  });
 });
 // clicking the backdrop (the dialog itself, outside .modalInner) closes it
-["helpModal", "settingsModal"].forEach(id => {
+["helpModal", "settingsModal", "badgeModal"].forEach(id => {
   const m = $(id);
   m.addEventListener("click", e => { if (e.target === m && m.close) m.close(); });
 });
@@ -1479,19 +2046,549 @@ function syncSettingsUI() {
   $("showHints").checked = S.showHints;
   $("showMath").checked = S.showMath;
   $("showFace").checked = S.showFace;
+  $("snapOn").checked = S.snap;
+  $("soundOn").checked = S.sound;
   $("legsSel").value = String(S.legs);
   $("sloppy").value = String(S.sloppyIdx);
+  document.querySelectorAll('input[name="levelCover"],input[name="levelSet"]').forEach(r => {
+    r.checked = r.value === S.preset;
+  });
+  const note = S.preset in PRESETS ? PRESETS[S.preset].note
+    : "Custom: you've picked your own settings below.";
+  $("levelNoteCover").textContent = note;
+  $("levelNoteSet").textContent = note;
 }
+
+/* ============================================================================
+   3D REPLAY
+   The one part of the game that needs a library, so it's strictly optional:
+   Three.js is fetched in the background once the first leg is walked, and if
+   it can't load (offline, blocked CDN, no WebGL) the "Watch in 3D" button just
+   never appears. Nothing else depends on it.
+
+   World frame matches the 2D map: x = east, y = north, 1 unit = 1 foot.
+   Three.js is y-up with -z forward, so a map point (x, y) sits at (x, 0, -y).
+   ============================================================================ */
+const THREE_SRC = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+const THREE_SRI = "sha512-dLxUelApnYxpLt6K2iomGngnHO83iUvZytA3YjDUCjT0HDOHKXnVYdf3hU4JjM8uEhxf9nD1/ey98U3t2vZ0qQ==";
+
+const replay = (() => {
+  let status = "idle";                       // idle | loading | ready | failed
+  let loadP = null;
+
+  const hasWebGL = () => {
+    try {
+      const c = document.createElement("canvas");
+      const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (!gl) return false;
+      const lose = gl.getExtension("WEBGL_lose_context");
+      if (lose) lose.loseContext();          // hand the test context straight back
+      return true;
+    } catch (_) { return false; }
+  };
+
+  function load() {
+    if (loadP) return loadP;
+    if (window.THREE) { status = "ready"; return (loadP = Promise.resolve()); }
+    if (!hasWebGL()) { status = "failed"; syncBtn(); return (loadP = Promise.reject(new Error("no WebGL"))); }
+    status = "loading";
+    loadP = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = THREE_SRC; s.integrity = THREE_SRI; s.crossOrigin = "anonymous"; s.async = true;
+      s.onload = () => {
+        if (window.THREE) { status = "ready"; res(); }
+        else { status = "failed"; rej(new Error("THREE missing")); }
+        syncBtn();
+      };
+      s.onerror = () => { status = "failed"; syncBtn(); rej(new Error("Three.js failed to load")); };
+      document.head.appendChild(s);
+    });
+    loadP.catch(() => {});                   // failure is handled by hiding the button
+    return loadP;
+  }
+
+  function syncBtn() {
+    const b = $("replayBtn"), show = S.finished && status !== "failed";
+    if (b.hidden === show) b.hidden = !show;
+  }
+
+  /* ---------------------------------------------------------------- scene */
+  let T, renderer, scene, camera, dyn, walker, prints, ribbons = [], markers = [], missGroup;
+  const matCache = new Map();
+  const mat = c => {
+    if (!matCache.has(c)) matCache.set(c, new T.MeshPhongMaterial({ color: c, flatShading: true, shininess: 6 }));
+    return matCache.get(c);
+  };
+  const W3 = (x, y, h = 0) => new T.Vector3(x, h, -y);
+  let seed = 11;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  function groundTexture() {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const g = c.getContext("2d");
+    g.fillStyle = "#7aa35a"; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 1600; i++) {
+      g.fillStyle = rnd() < .5 ? "rgba(58,92,38,.16)" : "rgba(178,210,128,.16)";
+      g.fillRect(rnd() * 256, rnd() * 256, 2 + rnd() * 4, 2 + rnd() * 4);
+    }
+    // one tile is 50 ft, so these land every 25 ft, the same grid as the map
+    g.fillStyle = "rgba(236,246,220,.2)";
+    [0, 127].forEach(p => { g.fillRect(p, 0, 2, 256); g.fillRect(0, p, 256, 2); });
+    const tex = new T.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = T.RepeatWrapping;
+    tex.repeat.set(14, 14);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return tex;
+  }
+
+  function shadowed(o) { o.traverse(m => { if (m.isMesh) m.castShadow = true; }); return o; }
+
+  function tree(x, y, s) {
+    const g = new T.Group();
+    const trunk = new T.Mesh(new T.CylinderGeometry(.45, .65, 7, 6), mat(0x6b4a2a)); trunk.position.y = 3.5;
+    const c1 = new T.Mesh(new T.IcosahedronGeometry(5.6, 0), mat(0x4f7a3f)); c1.position.y = 10;
+    const c2 = new T.Mesh(new T.IcosahedronGeometry(3.9, 0), mat(0x5f8f4b)); c2.position.set(1.4, 13.6, -.8);
+    g.add(trunk, c1, c2);
+    g.scale.setScalar(s); g.position.copy(W3(x, y)); g.rotation.y = rnd() * 6.3;
+    return shadowed(g);
+  }
+  function bush(x, y, s) {
+    const g = new T.Group();
+    [[-1.6, .4, 2.1], [1.6, .7, 1.8], [0, -1, 2.3]].forEach(([bx, bz, r]) => {
+      const m = new T.Mesh(new T.IcosahedronGeometry(r, 0), mat(0x6d9455));
+      m.position.set(bx, r * .7, bz); g.add(m);
+    });
+    g.scale.setScalar(s); g.position.copy(W3(x, y)); g.rotation.y = rnd() * 6.3;
+    return shadowed(g);
+  }
+  function boulder(x, y, s) {
+    const m = new T.Mesh(new T.IcosahedronGeometry(3.4, 0), mat(0x9aa3a8));
+    m.scale.set(1.2 * s, .65 * s, s); m.position.copy(W3(x, y, 1.2 * s)); m.rotation.y = rnd() * 6.3;
+    return shadowed(m);
+  }
+  function post(x, y) {
+    const m = new T.Mesh(new T.CylinderGeometry(.5, .55, 4, 8), mat(0x8a6a45));
+    m.position.copy(W3(x, y, 2));
+    return shadowed(m);
+  }
+
+  function makeStick() {
+    const g = new T.Group();
+    const pole = new T.Group(); pole.rotation.z = .2;
+    const shaft = new T.Mesh(new T.CylinderGeometry(.09, .17, 4.4, 6), mat(0x8a5a2b)); shaft.position.y = 2.2;
+    const sh = new T.Shape();
+    sh.moveTo(0, .55); sh.lineTo(2.1, 1.0); sh.lineTo(1.3, .1); sh.lineTo(2.0, -.75); sh.lineTo(0, -.45); sh.closePath();
+    const flag = new T.Mesh(new T.ShapeGeometry(sh),
+      new T.MeshLambertMaterial({ color: 0xce1126, side: T.DoubleSide }));
+    flag.position.set(.05, 3.75, 0);
+    pole.add(shaft, flag);
+    const ring = new T.Mesh(new T.RingGeometry(2.3, 2.7, 40), new T.MeshBasicMaterial({ color: 0xa8825c }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = .06;
+    g.add(shadowed(pole), ring);
+    // Oversized, like the map's: it's the whole point of the game, so it has
+    // to be findable from the overview shot, not just up close.
+    g.scale.setScalar(1.7);
+    return g;
+  }
+
+  /* A generic hiker: blocky on purpose, so it reads clearly at a distance and
+     costs next to nothing to draw. Faces -z; limbs pivot at hip and shoulder. */
+  function makeWalker() {
+    const g = new T.Group();
+    const limb = (w, h, d, color, x, y) => {
+      const geo = new T.BoxGeometry(w, h, d); geo.translate(0, -h / 2, 0);
+      const m = new T.Mesh(geo, mat(color)); m.position.set(x, y, 0); return m;
+    };
+    const L = limb(.55, 2.6, .6, 0x5d6b3a, -.38, 2.6), R = limb(.55, 2.6, .6, 0x5d6b3a, .38, 2.6);
+    const AL = limb(.38, 1.9, .45, 0x2f7d8c, -.98, 4.6), AR = limb(.38, 1.9, .45, 0x2f7d8c, .98, 4.6);
+    const torso = new T.Mesh(new T.BoxGeometry(1.5, 2.1, .85), mat(0x2f7d8c)); torso.position.y = 3.65;
+    const pack = new T.Mesh(new T.BoxGeometry(1.2, 1.5, .6), mat(0xce1126)); pack.position.set(0, 3.8, .7);
+    const head = new T.Mesh(new T.SphereGeometry(.62, 14, 10), mat(0xc68a5e)); head.position.y = 5.3;
+    const brim = new T.Mesh(new T.CylinderGeometry(1, 1, .1, 16), mat(0x7a6a45)); brim.position.y = 5.72;
+    const crown = new T.Mesh(new T.CylinderGeometry(.48, .58, .5, 12), mat(0x7a6a45)); crown.position.y = 5.98;
+    g.add(L, R, AL, AR, torso, pack, head, brim, crown);
+    shadowed(g);
+    // the gold marker from the 2D map, under their feet
+    const ring = new T.Mesh(new T.RingGeometry(1.4, 1.95, 32), new T.MeshBasicMaterial({ color: 0xf2a900 }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = .08;
+    g.add(ring);
+    g.userData = { L, R, AL, AR };
+    return g;
+  }
+
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function label(text, { bg = "#12395c", fg = "#fff", round = false, h = 3 } = {}) {
+    const px = 64, c = document.createElement("canvas"), g = c.getContext("2d");
+    const font = `800 ${px}px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif`;
+    g.font = font;
+    const H = px * 1.5, W = round ? H : Math.ceil(g.measureText(text).width + px * .9);
+    c.width = W; c.height = H;
+    g.fillStyle = bg;
+    if (round) { g.beginPath(); g.arc(W / 2, H / 2, H / 2 - 2, 0, Math.PI * 2); g.fill(); }
+    else { roundRect(g, 1, 1, W - 2, H - 2, H / 2 - 1); g.fill(); }
+    g.font = font; g.fillStyle = fg; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(text, W / 2, H / 2 + px * .05);
+    const tex = new T.CanvasTexture(c); tex.minFilter = T.LinearFilter;
+    const s = new T.Sprite(new T.SpriteMaterial({ map: tex, depthWrite: false }));
+    s.scale.set(h * W / H, h, 1);
+    return s;
+  }
+
+  function build() {
+    T = window.THREE;
+    renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "low-power" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.domElement.setAttribute("aria-hidden", "true");
+
+    scene = new T.Scene();
+    const SKY = 0xcfe6f3;
+    scene.background = new T.Color(SKY);
+    scene.fog = new T.Fog(SKY, 190, 440);
+    camera = new T.PerspectiveCamera(46, 16 / 9, .5, 1200);
+
+    scene.add(new T.HemisphereLight(0xeaf6ff, 0x55703a, .82));
+    // from the upper left of the map, so shadows fall the same way as in 2D
+    const sun = new T.DirectionalLight(0xfff2da, .72);
+    sun.position.set(-110, 170, -70);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 10, far: 520 });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.bias = -.0006;
+    scene.add(sun);
+
+    const ground = new T.Mesh(new T.PlaneGeometry(700, 700),
+      new T.MeshLambertMaterial({ map: groundTexture() }));
+    ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+    scene.add(ground);
+
+    // the same eight landmarks as the map, in the same places...
+    LANDMARKS.forEach(L => scene.add(
+      L.kind === "tree" ? tree(L.x, L.y, 1.1) : L.kind === "bush" ? bush(L.x, L.y, 1) :
+      L.kind === "boulder" ? boulder(L.x, L.y, 1.1) : post(L.x, L.y)));
+    // ...plus a ring of woods further out, so the horizon isn't bare
+    for (let i = 0; i < 70; i++) {
+      const a = rnd() * Math.PI * 2, r = 150 + rnd() * 190, x = r * Math.sin(a), y = r * Math.cos(a);
+      const k = rnd();
+      scene.add(k < .62 ? tree(x, y, .9 + rnd() * .8) : k < .88 ? bush(x, y, .9 + rnd() * .6) : boulder(x, y, .8 + rnd() * .7));
+    }
+    scene.add(makeStick());
+    walker = makeWalker(); scene.add(walker);
+    dyn = new T.Group(); scene.add(dyn);
+    $("replay").prepend(renderer.domElement);
+    wireOrbit(renderer.domElement);
+    if (window.ResizeObserver) new ResizeObserver(resize).observe($("replay"));
+    else window.addEventListener("resize", resize);
+  }
+
+  function resize() {
+    if (!renderer) return;
+    const r = $("replay").getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  }
+
+  // Only ever called on the per-replay layer, which never uses the shared
+  // mat() cache, so everything in it is safe to free. dispose() is idempotent,
+  // so materials shared between ribbons or dashes can be hit more than once.
+  function disposeTree(o) {
+    o.traverse(m => {
+      if (m.geometry) m.geometry.dispose();
+      if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); }
+    });
+  }
+
+  /* ------------------------------------------------------------- the plan */
+  let plan = null;
+  const easeIO = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  const lerpAng = (a, b, u) => a + ((((b - a) % 360) + 540) % 360 - 180) * u;
+  const hdg = (dx, dy) => norm(Math.atan2(dx, dy) * 180 / Math.PI);
+
+  function makePlan() {
+    const pts = S.trail.map(p => ({ x: p.x, y: p.y }));
+    const legs = [], cum = [0];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y);
+      legs.push({ a, b, len, h: hdg(b.x - a.x, b.y - a.y), bearing: S.used[i] });
+      cum.push(cum[i] + len);
+    }
+    const end = pts[pts.length - 1], miss = Math.hypot(end.x, end.y);
+    const toStick = miss > 1 ? hdg(-end.x, -end.y) : legs[legs.length - 1].h;
+    const segs = [{ kind: "intro", dur: 1.2 }];
+    legs.forEach((L, i) => {
+      segs.push({ kind: "turn", leg: i, dur: i ? .8 : .5 });
+      segs.push({ kind: "walk", leg: i, dur: 2.3 });
+    });
+    segs.push({ kind: "arrive", dur: 2.2 }, { kind: "finale", dur: 2.8 });
+    let at = 0; segs.forEach(s => { s.t0 = at; at += s.dur; });
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    return { pts, legs, cum, end, miss, toStick, segs, total: at, c: { x: cx, y: cy },
+             stars: starsFor(miss), finaleT: segs.find(s => s.kind === "finale").t0 };
+  }
+
+  function buildDynamic() {
+    [...dyn.children].forEach(o => { dyn.remove(o); disposeTree(o); });
+    ribbons = []; markers = [];
+
+    // trail ribbons, one per leg, grown with scale.z as the walker goes
+    const ribMat = new T.MeshBasicMaterial({ color: 0x12395c, transparent: true, opacity: .8 });
+    plan.legs.forEach(L => {
+      const geo = new T.BoxGeometry(.7, .03, 1); geo.translate(0, 0, -.5);
+      const m = new T.Mesh(geo, ribMat);
+      m.position.copy(W3(L.a.x, L.a.y, .05)); m.rotation.y = -rad(L.h); m.scale.z = .001;
+      dyn.add(m); ribbons.push(m);
+    });
+
+    // footprints: every 10 ft, stepping left and right, exactly like the map
+    const list = [];
+    let side = -1;
+    plan.legs.forEach((L, i) => {
+      const hr = rad(L.h), fx = Math.sin(hr), fy = Math.cos(hr), px = fy, py = -fx;
+      for (let s = PRINT_FT / 2; s <= L.len; s += PRINT_FT) {
+        side = -side;
+        const x = L.a.x + fx * s + px * 1.1 * side, y = L.a.y + fy * s + py * 1.1 * side;
+        list.push({ at: plan.cum[i] + s, x, y, h: L.h, fx, fy });
+      }
+    });
+    const pg = new T.CircleGeometry(1, 14); pg.rotateX(-Math.PI / 2);
+    prints = new T.InstancedMesh(pg, new T.MeshBasicMaterial({ color: 0x4a5f33, transparent: true, opacity: .75 }),
+      Math.max(1, list.length * 2));
+    const M = new T.Matrix4(), Q = new T.Quaternion(), up = new T.Vector3(0, 1, 0);
+    list.forEach((p, k) => {
+      Q.setFromAxisAngle(up, -rad(p.h));
+      M.compose(W3(p.x + p.fx * .55, p.y + p.fy * .55, .09), Q, new T.Vector3(.42, 1, .62));
+      prints.setMatrixAt(k * 2, M);
+      M.compose(W3(p.x - p.fx * .55, p.y - p.fy * .55, .09), Q, new T.Vector3(.32, 1, .42));
+      prints.setMatrixAt(k * 2 + 1, M);
+    });
+    prints.instanceMatrix.needsUpdate = true;
+    prints.count = 0;
+    prints.userData.at = list.map(p => p.at);
+    dyn.add(prints);
+
+    // numbered corners, like the dots on the map
+    plan.pts.slice(1, -1).forEach((p, i) => {
+      const s = label(String(i + 1), { round: true, h: 5 });
+      s.position.copy(W3(p.x, p.y, 4.5)); s.visible = false;
+      dyn.add(s); markers.push({ s, at: plan.cum[i + 1] });
+    });
+
+    // the miss: a dashed red line back to the stick and how far it is
+    missGroup = new T.Group(); missGroup.visible = false;
+    const { end, miss } = plan;
+    if (miss > 1.5) {
+      const dashMat = new T.MeshBasicMaterial({ color: 0xce1126 });
+      const h = hdg(-end.x, -end.y), n = Math.floor(miss / 2.4);
+      for (let k = 0; k < n; k++) {
+        const u = (k * 2.4 + .6) / miss;
+        const d = new T.Mesh(new T.BoxGeometry(.38, .04, 1.3), dashMat);
+        d.position.copy(W3(end.x * (1 - u), end.y * (1 - u), .1)); d.rotation.y = -rad(h);
+        missGroup.add(d);
+      }
+      // over the stick, not the midpoint: on a near miss the midpoint is right
+      // on top of the walker, and the tag would hide them
+      const tag = label(`${miss.toFixed(1)} ft`, { bg: "#ce1126", h: 3.4 });
+      tag.position.copy(W3(0, 0, 11));
+      missGroup.add(tag);
+    } else {
+      const tag = label("On the stick!", { bg: "#1e7a3c", h: 3.4 });
+      tag.position.copy(W3(0, 0, 11));
+      missGroup.add(tag);
+    }
+    dyn.add(missGroup);
+  }
+
+  /* Where everything is at time t. Worked out from scratch each frame, so
+     "Watch again" and "Skip" are just a change of t. */
+  function poseAt(t) {
+    const { segs, legs, pts, cum, end, toStick } = plan;
+    const seg = segs.find(s => t < s.t0 + s.dur) || segs[segs.length - 1];
+    const u = Math.min(1, Math.max(0, (t - seg.t0) / seg.dur));
+    const last = legs[legs.length - 1];
+    let x, y, h, along, walking = false;
+    if (seg.kind === "intro") { ({ x, y } = pts[0]); h = 0; along = 0; }
+    else if (seg.kind === "turn") {
+      const L = legs[seg.leg], prevH = seg.leg ? legs[seg.leg - 1].h : 0;
+      ({ x, y } = L.a); h = lerpAng(prevH, L.h, easeIO(u)); along = cum[seg.leg];
+    } else if (seg.kind === "walk") {
+      const L = legs[seg.leg], e = .35 * u + .65 * easeIO(u);   // mostly steady, soft ends
+      x = L.a.x + (L.b.x - L.a.x) * e; y = L.a.y + (L.b.y - L.a.y) * e;
+      h = L.h; along = cum[seg.leg] + L.len * e; walking = u < 1;
+    } else {
+      ({ x, y } = end); along = cum[cum.length - 1];
+      h = seg.kind === "arrive" ? lerpAng(last.h, toStick, easeIO(Math.min(1, u * 1.6))) : toStick;
+    }
+    return { seg, u, x, y, h: norm(h), along, walking };
+  }
+
+  /* --------------------------------------------------------------- camera */
+  let camPos = null, camLook = null;
+  const orbit = { yaw: 0, pitch: .78, auto: true, drag: false, lx: 0, ly: 0 };
+  function overviewR() {
+    const span = plan.pts.reduce((m, p) => Math.max(m, Math.hypot(p.x - plan.c.x, p.y - plan.c.y)), 30);
+    return (span * 1.7 + 36) * Math.max(1, 1.3 / camera.aspect);
+  }
+  function orbitPos() {
+    const R = overviewR(), { c } = plan;
+    const hz = R * Math.cos(orbit.pitch), sy = Math.sin(orbit.yaw), cy = Math.cos(orbit.yaw);
+    // aim a touch short of the centre, which lifts the shape clear of the button bar
+    return { pos: W3(c.x - sy * hz, c.y - cy * hz, R * Math.sin(orbit.pitch)),
+             look: W3(c.x - sy * R * .1, c.y - cy * R * .1, 0) };
+  }
+  function camGoal(p) {
+    const k = p.seg.kind;
+    if (k === "finale" || t >= plan.total) return { ...orbitPos(), rate: 1.5 };
+    if (k === "arrive") {
+      const { end, miss } = plan, dir = rad(plan.toStick), fx = Math.sin(dir), fy = Math.cos(dir);
+      // narrow screens see less sideways, so stand further back to fit both in
+      const back = Math.max(16, miss * .45 + 14) * Math.max(1, 1.2 / camera.aspect);
+      return { pos: W3(end.x - fx * back + fy * 7, end.y - fy * back - fx * 7, 11 + miss * .12),
+               look: W3(end.x + fx * miss * .6, end.y + fy * miss * .6, 1), rate: 2.4 };
+    }
+    // chase cam, a little behind, above and to the right of the walker
+    const hr = rad(p.h), fx = Math.sin(hr), fy = Math.cos(hr);
+    return { pos: W3(p.x - fx * 25 + fy * 5, p.y - fy * 25 - fx * 5, 12),
+             look: W3(p.x + fx * 16, p.y + fy * 16, 1.5), rate: 2.6 };
+  }
+
+  function wireOrbit(cv) {
+    cv.addEventListener("pointerdown", e => {
+      if (t < plan.total) return;
+      orbit.drag = true; orbit.auto = false; orbit.lx = e.clientX; orbit.ly = e.clientY;
+      try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    cv.addEventListener("pointermove", e => {
+      if (!orbit.drag) return;
+      orbit.yaw -= (e.clientX - orbit.lx) * .007;
+      orbit.pitch = Math.min(1.35, Math.max(.28, orbit.pitch + (e.clientY - orbit.ly) * .004));
+      orbit.lx = e.clientX; orbit.ly = e.clientY;
+    });
+    ["pointerup", "pointercancel"].forEach(ev => cv.addEventListener(ev, () => { orbit.drag = false; }));
+  }
+
+  /* ---------------------------------------------------------------- loop */
+  let open = false, raf = 0, t = 0, lastNow = 0, capText = null;
+  function caption(p) {
+    const k = p.seg.kind, n = plan.legs.length;
+    let s;
+    if (k === "intro") s = "Your stick, ready to go";
+    else if (k === "turn" || k === "walk") s = `Leg ${p.seg.leg + 1} of ${n} · ${plan.legs[p.seg.leg].bearing}°`;
+    else if (k === "arrive") s = plan.miss > 1.5 ? "Where's the stick?" : "Right on the stick!";
+    else s = `${plan.miss.toFixed(1)} feet from your stick <span class="st">${"★".repeat(plan.stars)}${"☆".repeat(3 - plan.stars)}</span>`;
+    if (s !== capText) { capText = s; $("replayCap").innerHTML = s; }
+  }
+
+  function frame(now) {
+    if (!open) return;
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min(.05, Math.max(0, (now - lastNow) / 1000));
+    lastNow = now;
+    t = Math.min(plan.total, t + dt);
+    const p = poseAt(t);
+
+    walker.position.copy(W3(p.x, p.y));
+    walker.rotation.y = -rad(p.h);
+    const { L, R, AL, AR } = walker.userData;
+    const sw = p.walking ? Math.sin(p.along * .62) * .62 : 0;
+    const damp = x => x * .8;                            // settle limbs when stopped
+    L.rotation.x = p.walking ? sw : damp(L.rotation.x);
+    R.rotation.x = p.walking ? -sw : damp(R.rotation.x);
+    AL.rotation.x = p.walking ? -sw * .7 : damp(AL.rotation.x);
+    AR.rotation.x = p.walking ? sw * .7 : damp(AR.rotation.x);
+    walker.position.y = p.walking ? Math.abs(Math.sin(p.along * .62)) * .16 : 0;
+
+    ribbons.forEach((m, i) => {
+      const L0 = plan.legs[i], f = Math.min(1, Math.max(0, (p.along - plan.cum[i]) / L0.len));
+      m.scale.z = Math.max(.001, f * L0.len);
+    });
+    const at = prints.userData.at;
+    let k = 0; while (k < at.length && at[k] <= p.along + .01) k++;
+    prints.count = k * 2;
+    markers.forEach(m => { m.s.visible = p.along >= m.at - .01; });
+    missGroup.visible = p.seg.kind === "arrive" || p.seg.kind === "finale";
+
+    if (t >= plan.total && orbit.auto && !REDUCED.matches) orbit.yaw += dt * .06;
+    const goal = camGoal(p);
+    const a = 1 - Math.exp(-goal.rate * dt);
+    camPos.lerp(goal.pos, a); camLook.lerp(goal.look, a);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+
+    const done = t >= plan.total;
+    if ($("replayHint").hidden === done) $("replayHint").hidden = !done;
+    if ($("replaySkip").hidden !== done) $("replaySkip").hidden = done;
+    caption(p);
+    renderer.render(scene, camera);
+  }
+
+  function startAt(t0) {
+    t = t0; capText = null;
+    orbit.yaw = 0; orbit.pitch = .78; orbit.auto = true;
+    // begin high over the whole walk, then swoop down to the stick
+    const o = t0 >= plan.total ? orbitPos() : (() => {
+      const { c } = plan, R = overviewR();
+      return { pos: W3(c.x, c.y - R * .55, R * .85), look: W3(c.x, c.y, 0) };
+    })();
+    camPos = o.pos.clone(); camLook = o.look.clone();
+    lastNow = performance.now();
+  }
+
+  async function show() {
+    if (!S.finished) return;
+    const b = $("replayBtn"), label0 = b.lastElementChild.textContent;
+    if (status !== "ready") {
+      b.disabled = true; b.lastElementChild.textContent = "Loading 3D…";
+      try { await load(); } catch (_) { b.disabled = false; b.lastElementChild.textContent = label0; return; }
+      b.disabled = false; b.lastElementChild.textContent = label0;
+      if (!S.finished) return;                     // they pressed Play again meanwhile
+    }
+    try { if (!renderer) build(); }
+    catch (_) { status = "failed"; syncBtn(); return; }
+    plan = makePlan();
+    buildDynamic();
+    $("replay").hidden = false;
+    resize();
+    startAt(REDUCED.matches ? plan.total : 0);
+    open = true;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(frame);
+    $("stage").scrollIntoView({ block: "nearest", behavior: REDUCED.matches ? "auto" : "smooth" });
+    $("replayClose").focus({ preventScroll: true });
+  }
+  function hide(returnFocus = true) {
+    if (!open) return;
+    open = false; cancelAnimationFrame(raf);
+    $("replay").hidden = true;
+    if (returnFocus && !$("replayBtn").hidden) $("replayBtn").focus({ preventScroll: true });
+  }
+
+  $("replayBtn").addEventListener("click", show);
+  ["replayClose", "replayDone"].forEach(id => $(id).addEventListener("click", () => hide()));
+  $("replayAgain").addEventListener("click", () => { if (plan) startAt(0); });
+  $("replaySkip").addEventListener("click", () => { if (plan) t = Math.max(t, plan.finaleT); });
+  $("replay").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); hide(); } });
+
+  return { load, syncBtn, hide, get status() { return status; } };
+})();
 
 /* ============================================================================
    GO
    ============================================================================ */
+loadSaved();
 buildCompass();
 buildField();
 applyLayout();
 $("coverCompass").appendChild(cSvg);        // the cover borrows the live compass
 syncSettingsUI();
-$("sloppy").dispatchEvent(new Event("input"));
+sloppyNote();
+syncBadgeCount();
 syncUI();
 </script>
 </body>
