@@ -661,8 +661,9 @@
     </ul>
 
     <h3>Levels, stars and badges</h3>
-    <p><b>Beginner</b> tells you the next bearing and which way to turn. Change level with the
-      <b>gear button</b>. Land within 10 feet for 3 stars. The <b>medal button</b> shows your badges.</p>
+    <p><b>Beginner</b> tells you the next bearing and which way to turn. Finish within 50 feet
+      and you move up to <b>Scout</b>, where you work out the bearings yourself. Change level any
+      time with the <b>gear button</b>. Land within 10 feet for 3 stars. The <b>medal button</b> shows your badges.</p>
 
     <div class="modalFoot">
       <button class="primary" value="close">Got it</button>
@@ -846,8 +847,8 @@ const S = {
   sloppyIdx: 2,
   showFace: true, showMath: false, showHints: false,   // both crutches start off
   snap: true, sound: true,
-  preset: "scout",
-  guided: false,          // the walkthrough round; decided when PLAY is pressed
+  preset: "beginner",     // Beginner is the tutorial; settings are applied from PRESETS below
+  promote: false,         // a good Beginner round just ended: Play again moves up to Scout
   dialOK: false,          // step 1 done for this leg: they've settled on a bearing
   bigView: "compass",     // phones: the compass is where steps 1 and 2 happen
   started: false,                     // false while the title cover is up
@@ -861,7 +862,7 @@ const S = {
    ============================================================================ */
 const PRESETS = {
   beginner: { name: "Beginner", sloppyIdx: 1, showHints: true,  showMath: true,  showFace: true,  snap: true,
-    note: "Tells you the next bearing and which way to turn. Extra-steady hands." },
+    note: "Start here. Tells you the next bearing and which way to turn." },
   scout:    { name: "Scout",    sloppyIdx: 2, showHints: false, showMath: false, showFace: true,  snap: true,
     note: "You work out each bearing yourself. Realistic wobble. The classic game." },
   expert:   { name: "Expert",   sloppyIdx: 2, showHints: false, showMath: false, showFace: false, snap: false,
@@ -871,11 +872,11 @@ const PRESET_KEYS = ["sloppyIdx", "showHints", "showMath", "showFace", "snap"];
 const matchPreset = () =>
   Object.keys(PRESETS).find(id => PRESET_KEYS.every(k => PRESETS[id][k] === S[k])) || "custom";
 
-/* The guided round switches every helper on without touching the settings, so
-   when it ends the player lands on exactly the level they picked. */
-const coachOn = () => S.showHints || S.guided;
-const mathOn  = () => S.showMath  || S.guided;
-const faceOn  = () => S.showFace  || S.guided;
+/* Helpers come straight from the settings. (There used to be a separate guided
+   first round that forced them on; Beginner level now does that job.) */
+const coachOn = () => S.showHints;
+const mathOn  = () => S.showMath;
+const faceOn  = () => S.showFace;
 
 /* ============================================================================
    BADGES AND STATS
@@ -1494,7 +1495,7 @@ function syncUI() {
   if (wb.disabled !== disabled) wb.disabled = disabled;
   setText(wb, label);
   wb.classList.toggle("go", ph === "walk");
-  wb.classList.toggle("pulse", ph === "walk" && S.guided);
+  wb.classList.toggle("pulse", ph === "walk" && S.preset === "beginner");
   if ($("resetBtn").hidden !== S.finished) $("resetBtn").hidden = S.finished;
 
   /* ---- where you are: leg number and the three step chips ---- */
@@ -1518,7 +1519,10 @@ function syncUI() {
 
 function primaryAction() {
   const ph = phase();
-  if (ph === "done") reset();
+  if (ph === "done") {
+    if (S.promote && S.preset === "beginner") applyPreset("scout");   // earned it
+    reset();
+  }
   else if (ph === "dial") { S.dialOK = true; syncUI(); }
   else if (ph === "walk") walk();
 }
@@ -1649,9 +1653,14 @@ function showResult() {
     : spare[0];
   const levelName = S.preset in PRESETS ? PRESETS[S.preset].name : "your custom";
   let tip = "";
-  if (S.guided && S.preset !== "beginner") {
-    tip = `<div class="tip">Your first round had extra help. <b>Play again</b> to try it ` +
-          `at <b>${levelName}</b> level.</div>`;
+  /* Beginner is practice. Land within 50 feet (1 star or better) and the next
+     round moves up to Scout; miss by more and they get another go on Beginner.
+     Never automatic past Scout: Expert is only ever chosen in settings. */
+  S.promote = S.preset === "beginner" && starsFor(d) >= 1;
+  if (S.promote) {
+    tip = `<div class="tip">Next round: <b>Scout</b>. You'll work out the bearings yourself.</div>`;
+  } else if (S.preset === "beginner") {
+    tip = `<div class="tip">One more practice round on <b>Beginner</b>.</div>`;
   } else if (d > 25 && spare.length) {
     tip = `<div class="tip">Tricky one? Switch to <b>Beginner</b> with the <b>gear button</b> ` +
           `for ${list}.</div>`;
@@ -1661,7 +1670,7 @@ function showResult() {
   const stars = starsFor(d);
   const fair = S.sloppyIdx > 0;               // "Perfect robot" can't miss, so it can't
                                               // earn the accuracy badges either
-  const helpersOff = !S.guided && !S.showHints && !S.showMath;
+  const helpersOff = !S.showHints && !S.showMath;
   const wrapped = S.used.some((b, i) => {
     if (i === 0 || !expectedBearings(i, dir).includes(b)) return false;
     const prev = S.used[i - 1];
@@ -1707,7 +1716,6 @@ function showResult() {
   if (fresh.length) sfx.badge();
   if (stars === 3) buzz([30, 70, 30]);
 
-  S.guided = false;                         // the walkthrough is a one-time thing
 }
 
 const starsFor = d => d < 10 ? 3 : d < 25 ? 2 : d < 50 ? 1 : 0;
@@ -1957,7 +1965,7 @@ function applyPreset(id) {
   if (!(id in PRESETS)) return;
   Object.assign(S, pick(PRESETS[id]));
   S.preset = id;
-  if (id === "expert") S.guided = false;          // experts skip the walkthrough
+  S.promote = false;               // a level picked by hand always wins
   sloppyNote(); syncSettingsUI(); save(); syncUI();
 }
 document.querySelectorAll('input[name="levelCover"],input[name="levelSet"]').forEach(r =>
@@ -1970,9 +1978,6 @@ function startGame() {
   const panel = $("gamePanel");
   panel.removeAttribute("inert");
   sfx.unlock();                             // PLAY is the tap that lets audio start
-  // First visit only, and not for experts. With storage available a returning
-  // player who has already finished a round skips it too.
-  S.guided = S.preset !== "expert" && STATS.rounds === 0;
   S.started = true;
   applyLayout();
   syncUI();
@@ -2801,7 +2806,8 @@ const replay = (() => {
 /* ============================================================================
    GO
    ============================================================================ */
-loadSaved();
+Object.assign(S, pick(PRESETS.beginner));   // everyone starts on Beginner...
+loadSaved();                                // ...unless a saved visit says otherwise
 buildCompass();
 buildField();
 applyLayout();
