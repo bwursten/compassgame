@@ -8,16 +8,21 @@
 
 <!--
   ============================================================================
-  COMPASS GAME  —  single self-contained file. No build step. The game itself
-  works offline once loaded.
+  COMPASS GAME  —  one HTML file plus scout-life-logo.png (publish both, side
+  by side). No build step. The game itself works offline once loaded.
 
   ONE OPTIONAL LIBRARY. The 3D replay fetches Three.js r128 (~600 KB, ~150 KB
   gzipped) from cdnjs, pinned with a subresource-integrity hash, and only
   after the player walks their first leg (or presses "3D view" on the map).
-  If it can't load — offline, CDN blocked, no WebGL — the "Watch in 3D" and
-  "3D view" buttons simply never appear, and the 2D map carries on as normal. If your
-  site has a Content-Security-Policy, allow https://cdnjs.cloudflare.com in
-  script-src for this frame.
+  "3D view" hides straight away without WebGL. Otherwise both 3D buttons show,
+  and if Three.js then can't load (offline, CDN blocked) they say "Loading…"
+  once and disappear; the 2D game carries on as normal.
+
+  CONTENT-SECURITY-POLICY. The host page's CSP does not apply inside the frame.
+  If you serve THIS file with a CSP of its own, it needs 'unsafe-inline' (or
+  hashes) for script-src and style-src, since all code and styles are inline,
+  plus https://cdnjs.cloudflare.com in script-src. The host page may need
+  frame-src for wherever this file is served from.
 
   STORAGE IS OPTIONAL. Badges, stats and the chosen level are saved to
   localStorage only if the browser allows it. Inside the sandboxed iframe below
@@ -37,7 +42,8 @@
 
   sandbox="allow-scripts" is belt and braces: nothing here needs same-origin,
   storage, forms or navigation, so an opaque origin costs nothing and limits the
-  damage from anything added later.
+  damage from anything added later. (Which is also why the dialogs close from
+  JS rather than with <form method="dialog">: the sandbox blocks all forms.)
 
   Height matters: the page cannot resize its own iframe. The layout needs about
   1140px, and the result panel adds roughly 150px more once a round finishes, so
@@ -89,12 +95,15 @@
      are sampled straight out of cover.png so this matches the mock exactly.
      The logo is a cropped bitmap on that same cream, so it tiles in seamlessly —
      if you ever change --cover-bg, the logo will show a cream box behind it. */
+  /* Pinned to the TOP of the frame, not centred. The iframe is a fixed 1300px
+     tall, so "centred" meant 650px down — below the fold on a laptop once the
+     host page's own header sits above it. */
   .cover{
-    position:fixed;inset:0;z-index:20;overflow:auto;
-    display:flex;align-items:center;justify-content:center;
-    background:#f4f0e5;padding:24px 16px;
+    position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;overflow:auto;
+    display:flex;align-items:flex-start;justify-content:center;
+    background:#f4f0e5;padding:14px 16px 24px;
   }
-  .coverInner{margin:auto;width:100%;max-width:404px;text-align:center}
+  .coverInner{margin:0 auto;width:100%;max-width:404px;text-align:center}
   /* 330px is the wordmark's natural width, so it renders 1:1 with no upscaling */
   .coverLogo{display:block;width:min(330px,78%);height:auto;margin:0 auto 4px}
   .coverTitle{
@@ -109,7 +118,9 @@
   /* Negative margins claw back the empty rotation margin: the plate fills only
      71% of the box height, leaving ~56px of nothing above and below it, so
      without this the perceived gaps are 80px instead of the mock's 26-30px. */
-  .coverCompass{width:min(392px,96%);margin:-26px auto -30px}
+  /* Trimmed from 392px so PLAY clears the fold on a laptop with the host site's
+     header above the frame; the negative margins scale with it. */
+  .coverCompass{width:min(290px,86%);margin:-19px auto -22px}
   /* The compass carries an opaque backing so it pairs with the field view in the
      game. On the cover the cream shows through instead, matching the mock — and
      it has to, or the negative margins above would paint over the title. */
@@ -146,7 +157,10 @@
   .stp.now .sn{background:var(--navy);color:#fff}
   .stp.done{border-color:#a9d9bb;color:var(--green-ink);background:#e8f5ec}
   .stp.done .sn{background:var(--green);color:#fff}
-  .stp:disabled{opacity:1;cursor:default}
+  .stp[aria-disabled="true"]{cursor:default}
+  .stp[aria-disabled="true"]:not(.now):not(.done):hover{background:#fff}
+  .stp.now:hover{background:#eaf1f7}
+  .stp.done:hover{background:#e8f5ec}
   .ic{width:22px;height:22px;flex:0 0 auto}
   .badgeBtn{min-width:var(--tap);padding:0 10px;gap:5px;border-color:var(--line);color:var(--muted);
     font-size:.95rem;font-variant-numeric:tabular-nums}
@@ -187,7 +201,7 @@
   /* number and degree sign share one bordered box, so "255°" reads as a unit */
   .numwrap{display:inline-flex;align-items:center;
     border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 12px 0 6px}
-  .numwrap:focus-within{outline:3px solid var(--gold);outline-offset:1px}
+  .numwrap:focus-within{outline:3px solid var(--navy);outline-offset:1px}
   .numwrap .deg{font-size:1.5rem;font-weight:700;color:var(--navy);line-height:1}
   .bignum{
     font-family:inherit;font-size:1.7rem;font-weight:700;color:var(--navy);
@@ -223,7 +237,7 @@
   button:hover:not(:disabled){background:#eaf1f7}
   button:active:not(:disabled){background:#dde8f1}
   button:disabled{opacity:.4;cursor:not-allowed}
-  button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  button:focus-visible{outline:3px solid var(--navy);outline-offset:2px}
   button.primary{background:var(--navy);color:#fff;font-size:1.05rem;flex:1 1 auto;min-height:52px}
   button.primary:hover:not(:disabled){background:var(--navy-2)}
   button.ghost{border-color:var(--line);color:var(--muted);flex:0 0 auto}
@@ -236,7 +250,7 @@
   input[type=checkbox]{width:20px;height:20px;accent-color:var(--navy);flex:0 0 auto}
   /* one focus treatment for everything focusable */
   select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{
-    outline:3px solid var(--gold);outline-offset:2px}
+    outline:3px solid var(--navy);outline-offset:2px}
 
   .warn{color:var(--red-ink);font-size:.89rem;margin-top:6px}
 
@@ -261,8 +275,13 @@
   /* ---------------- settings modal ---------------- */
   /* A closed <dialog> is display:none by default, so this is invisible and
      unreachable by keyboard until showModal() is called. */
-  dialog.modal{border:0;padding:0;background:transparent;
-    width:100%;max-width:min(680px,92vw);max-height:90vh;overflow:auto}
+  /* Same reason as the cover: a modal dialog centres itself in the 1300px
+     frame, far below the gear button that opened it. Pin it near the top and
+     cap its height at something that fits a phone screen. */
+  dialog.modal{border:0;padding:0;background:transparent;margin:16px auto auto;
+    width:100%;max-width:min(680px,92vw);max-height:min(90vh,640px);overflow:auto}
+  /* Safari before 15.4 has no <dialog>: without this all three show on load */
+  dialog:not([open]){display:none}
   dialog.modal::backdrop{background:rgba(18,57,92,.5)}
   .modalInner{background:var(--card);border:1px solid var(--line);border-radius:14px;
     padding:16px;box-shadow:0 14px 44px rgba(20,40,60,.3)}
@@ -312,7 +331,7 @@
   .levelBtns label:hover span{background:#eaf1f7}
   .levelBtns input:checked + span{background:var(--navy);border-color:var(--navy);color:#fff}
   .levelBtns input:checked + span small{color:#d6e3ee}
-  .levelBtns input:focus-visible + span{outline:3px solid var(--gold);outline-offset:2px}
+  .levelBtns input:focus-visible + span{outline:3px solid var(--navy);outline-offset:2px}
   .levelNote{font-size:.84rem;color:var(--muted);margin:8px 0 0;min-height:2.7em}
   .level.inModal .levelNote{min-height:0}
 
@@ -321,7 +340,11 @@
      then green "Walk 100 feet". One place to look instead of two. */
   button.primary.go{background:var(--green)}
   button.primary.go:hover:not(:disabled){background:#1a6b34}
-  button.primary:disabled{opacity:1;background:#e4e8ec;color:#50606d;border-color:#d3d9df}
+  /* aria-disabled, not disabled: a disabled button drops keyboard focus to the
+     page, and the main button changes state under the player's finger twice a leg */
+  button.primary:disabled,button.primary[aria-disabled="true"]{opacity:1;background:#e4e8ec;
+    color:#50606d;border-color:#d3d9df;cursor:default}
+  button.primary[aria-disabled="true"]:hover{background:#e4e8ec}
   button.primary.pulse{animation:pulse 1.3s ease-out infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(30,122,60,.55)}100%{box-shadow:0 0 0 12px rgba(30,122,60,0)}}
   @media (prefers-reduced-motion:reduce){
@@ -434,6 +457,12 @@
       background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%);
     }
   }
+  /* Too narrow for three labelled chips (magazine margins make the frame
+     narrower than the phone): keep the label only on the current step. */
+  @media (max-width:374px){
+    .stp:not(.now) .lbl{display:none}
+    .stp:not(.now){padding:0 4px}
+  }
   @media (max-width:430px){
     .stp{padding:0 9px 0 4px;font-size:.86rem;gap:5px;min-height:34px}
     .stp .sn{width:24px;height:24px}
@@ -527,11 +556,11 @@
     <div class="panelBar">
       <span class="legNo" id="legNo">Leg 1 of 3</span>
       <ol class="stepper" id="stepper" aria-label="Steps for this leg">
-        <li><button type="button" class="stp" data-go="dial"><span class="sn" aria-hidden="true">1</span>Set dial</button></li>
+        <li><button type="button" class="stp" data-go="dial"><span class="sn" aria-hidden="true">1</span><span class="lbl">Set dial</span></button></li>
         <li class="sline" aria-hidden="true"></li>
-        <li><button type="button" class="stp" data-go="turn"><span class="sn" aria-hidden="true">2</span>Turn</button></li>
+        <li><button type="button" class="stp" data-go="turn"><span class="sn" aria-hidden="true">2</span><span class="lbl">Turn</span></button></li>
         <li class="sline" aria-hidden="true"></li>
-        <li><button type="button" class="stp" data-go="walk"><span class="sn" aria-hidden="true">3</span>Walk</button></li>
+        <li><button type="button" class="stp" data-go="walk"><span class="sn" aria-hidden="true">3</span><span class="lbl">Walk</span></button></li>
       </ol>
       <span class="barBtns">
         <button class="badgeBtn" id="badgeBtn" type="button" aria-haspopup="dialog" title="Your badges">
@@ -619,7 +648,10 @@
           <svg class="ic" aria-hidden="true"><use href="#play"/></svg><span>Watch in 3D</span></button>
       </div>
 
-      <div class="result" id="result" aria-live="polite"></div>
+      <div class="result" id="result"></div>
+      <!-- the result panel appears and fills in the same tick, which screen
+           readers often miss, and it holds a whole table; this says it in a line -->
+      <p class="sr" id="announce" aria-live="polite"></p>
     </div>
   </section>
 
@@ -628,10 +660,10 @@
 
 <!-- ============ HOW TO PLAY (hidden until the ? button is pressed) ============ -->
 <dialog class="modal narrow" id="helpModal" aria-labelledby="helpTitle">
-  <form method="dialog" class="modalInner">
+  <div class="modalInner">
     <div class="modalHead">
       <h2 id="helpTitle">How to play the Compass Game</h2>
-      <button class="iconBtn" value="close" aria-label="Close instructions">&times;</button>
+      <button type="button" class="iconBtn" data-close aria-label="Close instructions">&times;</button>
     </div>
 
     <p class="lead"><b>The goal:</b> walk three legs of 100 feet and end up back at the stick
@@ -666,25 +698,25 @@
       time with the <b>gear button</b>. Land within 10 feet for 3 stars. The <b>medal button</b> shows your badges.</p>
 
     <div class="modalFoot">
-      <button class="primary" value="close">Got it</button>
+      <button type="button" class="primary" data-close>Got it</button>
     </div>
-  </form>
+  </div>
 </dialog>
 
 <!-- ============ BADGES (hidden until the medal button is pressed) ============ -->
 <dialog class="modal" id="badgeModal" aria-labelledby="badgeTitle">
-  <form method="dialog" class="modalInner">
+  <div class="modalInner">
     <div class="modalHead">
       <h2 id="badgeTitle">Your badges</h2>
-      <button class="iconBtn" value="close" aria-label="Close badges">&times;</button>
+      <button type="button" class="iconBtn" data-close aria-label="Close badges">&times;</button>
     </div>
     <div class="statRow" id="statRow"></div>
     <ul class="badgeGrid" id="badgeGrid"></ul>
     <p class="field-note" id="badgeNote"></p>
     <div class="modalFoot">
-      <button class="primary" value="close">Back to the game</button>
+      <button type="button" class="primary" data-close>Back to the game</button>
     </div>
-  </form>
+  </div>
 </dialog>
 
 <!-- ============ SETTINGS (hidden until the gear button is pressed) ============
@@ -692,12 +724,13 @@
      Escape to close, the backdrop, and focus returning to the button that opened it
      afterwards — none of which is worth hand-rolling. It is display:none until
      showModal() runs, so nothing here is visible or focusable on load.
-     The wrapper is <form method="dialog"> so any button inside closes it. -->
+     NOT <form method="dialog">: the recommended sandbox blocks every form
+     submission, dialog ones included, so buttons marked data-close close it in JS. -->
 <dialog class="modal" id="settingsModal" aria-labelledby="settingsTitle">
-  <form method="dialog" class="modalInner">
+  <div class="modalInner">
     <div class="modalHead">
       <h2 id="settingsTitle">Settings</h2>
-      <button class="iconBtn" value="close" aria-label="Close settings">&times;</button>
+      <button type="button" class="iconBtn" data-close aria-label="Close settings">&times;</button>
     </div>
 
     <fieldset class="level inModal">
@@ -741,9 +774,9 @@
     </div>
 
     <div class="modalFoot">
-      <button class="primary" value="close">Done</button>
+      <button type="button" class="primary" data-close>Done</button>
     </div>
-  </form>
+  </div>
 </dialog>
 
 <script>
@@ -1492,7 +1525,7 @@ function syncUI() {
       ? `Turn ${Math.max(1, Math.round(Math.abs(off)))}° ${off > 0 ? "right" : "left"}`
       : "Line up the needle";
   }
-  if (wb.disabled !== disabled) wb.disabled = disabled;
+  setAttr(wb, "aria-disabled", disabled);
   setText(wb, label);
   wb.classList.toggle("go", ph === "walk");
   wb.classList.toggle("pulse", ph === "walk" && S.preset === "beginner");
@@ -1504,10 +1537,13 @@ function syncUI() {
   document.querySelectorAll("#stepper .stp").forEach((b, i) => {
     setClass(b, "stp" + (i < at ? " done" : i === at ? " now" : ""));
     setText(b.firstElementChild, i < at ? "✓" : String(i + 1));
+    // spoken name carries the state the tick shows (the tick itself is aria-hidden)
+    setAttr(b, "aria-label", `Step ${i + 1}, ${b.lastElementChild.textContent}` +
+      (i < at ? ", done" : i === at ? ", current" : ""));
     // Back to "Set dial" from a later step, or ahead to "Turn" from the first.
     // Walking only ever happens from the main button.
     const can = ph !== "done" && ph !== "wait" && (i === 0 ? at > 0 : i === 1 ? at === 0 : false);
-    if (b.disabled === can) b.disabled = !can;
+    setAttr(b, "aria-disabled", !can);
     if (i === at) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
   });
   document.querySelectorAll("#stepper .sline").forEach((l, i) => l.classList.toggle("done", i < at));
@@ -1712,6 +1748,12 @@ function showResult() {
     `<div class="recap">Bearings you used, after walking ${LEG_FT * S.legs} feet total:` +
     `<table>${rows}</table></div>` + tip;
 
+  const spoken = `${d.toFixed(1)} feet from your stick. ${stars} of 3 stars.` +
+    (fresh.length ? ` New badge: ${fresh.map(id => BADGES.find(b => b.id === id).name).join(", ")}.` : "") +
+    (S.promote ? " Next round: Scout." : "");
+  $("announce").textContent = "";
+  setTimeout(() => { $("announce").textContent = spoken; }, 150);
+
   if (stars) sfx.chime(stars); else sfx.miss();
   if (fresh.length) sfx.badge();
   if (stars === 3) buzz([30, 70, 30]);
@@ -1761,8 +1803,16 @@ function reset() {
    ============================================================================ */
 // Touching the dial always means step 1 — even mid-turn, so grabbing the ring
 // by mistake sends you back to "Set dial" rather than silently moving the goal.
-function setDial(v) { S.dial = norm(Math.round(v)); S.dialOK = false; syncUI(); }
+// Nothing turns while you're walking (or the compass is swinging back upright
+// between legs), or once the round is over. The title-screen compass is a toy
+// and stays live. Covers every route in: drags, arrows, typing, the 3D view.
+const handsOff = () => S.started && (S.animating || S.finished);
+function setDial(v) {
+  if (handsOff()) return;
+  S.dial = norm(Math.round(v)); S.dialOK = false; syncUI();
+}
 function setFace(v) {
+  if (handsOff()) return;
   snapGen++;                                // the player's hand beats the snap
   S.dialOK = true;                          // turning yourself means the dial is set
   S.facing = norm(v); syncUI();
@@ -1850,6 +1900,10 @@ $("resetBtn").addEventListener("click", reset);
   const delta = (a, last) => { let d = a - last; if (d > 180) d -= 360; if (d < -180) d += 360; return d; };
 
   let mode = null, last = 0, swipeFrom = 0;
+  // The dial only holds whole degrees, but a slow twist moves it a fraction of a
+  // degree per event. Rounding each one on its own threw them all away, so a
+  // careful kid could twist and twist and see nothing happen. Bank the remainder.
+  let ringAcc = 0;
 
   cSvg.addEventListener("pointerdown", e => {
     // on the cover the compass isn't inside a .view at all, so the inset rule
@@ -1859,7 +1913,7 @@ $("resetBtn").addEventListener("click", reset);
     const p = local(e); if (!p) return;
     const r = Math.hypot(p.x, p.y);
     if (r > C.bezel + 2)      { mode = "plate"; last = ang(p); }
-    else if (r > C.face - 8)  { mode = "ring";  last = ang(p); }
+    else if (r > C.face - 8)  { mode = "ring";  last = ang(p); ringAcc = 0; }
     else                      { mode = "swipe"; swipeFrom = e.clientX; }
     try { cSvg.setPointerCapture(e.pointerId); } catch (_) {}
     e.preventDefault();
@@ -1877,7 +1931,11 @@ $("resetBtn").addEventListener("click", reset);
     last = a;
     // the plate carries you round with it; the ring turns against the plate
     if (mode === "plate") setFace(S.facing + d);
-    else setDial(S.dial - d);
+    else {
+      ringAcc -= d;                         // the ring turns against the plate
+      const step = Math.round(ringAcc);
+      if (step) { ringAcc -= step; setDial(S.dial + step); }
+    }
   });
   ["pointerup", "pointercancel"].forEach(ev =>
     cSvg.addEventListener(ev, () => {
@@ -1978,6 +2036,9 @@ function startGame() {
   const panel = $("gamePanel");
   panel.removeAttribute("inert");
   sfx.unlock();                             // PLAY is the tap that lets audio start
+  // A twist of the title-screen baseplate mustn't carry over and start leg 1 on
+  // step 2; the dial reading they chose is fine to keep.
+  S.facing = 0; S.dialOK = false; snapGen++;
   S.started = true;
   applyLayout();
   syncUI();
@@ -1989,7 +2050,13 @@ $("playBtn").addEventListener("click", startGame);
 const openModal = m => {
   if (m.showModal) m.showModal();
   else m.setAttribute("open", "");            // very old browsers: inline fallback
+  // Pinned near the top of the frame (see the CSS), which is where every button
+  // that opens one lives — but make sure the host page shows it.
+  m.scrollIntoView({ block: "nearest" });
 };
+const closeModal = m => { if (m.close) m.close(); else m.removeAttribute("open"); };
+document.querySelectorAll("[data-close]").forEach(b =>
+  b.addEventListener("click", () => closeModal(b.closest("dialog"))));
 [["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"], ["badgeBtn", "badgeModal"],
  ["coverHelpBtn", "helpModal"], ["coverSettingsBtn", "settingsModal"]].forEach(([btn, dlg]) => {
   $(btn).addEventListener("click", () => {
@@ -2000,7 +2067,7 @@ const openModal = m => {
 // clicking the backdrop (the dialog itself, outside .modalInner) closes it
 ["helpModal", "settingsModal", "badgeModal"].forEach(id => {
   const m = $(id);
-  m.addEventListener("click", e => { if (e.target === m && m.close) m.close(); });
+  m.addEventListener("click", e => { if (e.target === m) closeModal(m); });
 });
 
 /* Browsers restore form-control state across a reload, ignoring the `checked`
@@ -2104,17 +2171,29 @@ const replay = (() => {
     const tex = new T.CanvasTexture(c);
     tex.wrapS = tex.wrapT = T.RepeatWrapping;
     tex.repeat.set(14, 14);
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());   // 4x is plenty for grass
     return tex;
   }
 
   function shadowed(o) { o.traverse(m => { if (m.isMesh) m.castShadow = true; }); return o; }
 
+  // One buffer per shape, shared by every tree, bush and rock that uses it
+  let GEO = null;
+  const geo = () => GEO || (GEO = {
+    trunk: new T.CylinderGeometry(.45, .65, 7, 6),
+    crown1: new T.IcosahedronGeometry(5.6, 0),
+    crown2: new T.IcosahedronGeometry(3.9, 0),
+    ball: new T.IcosahedronGeometry(1, 0),
+    rock: new T.IcosahedronGeometry(3.4, 0),
+    post: new T.CylinderGeometry(.5, .55, 4, 8)
+  });
+  const PART_COLOR = { trunk: 0x6b4a2a, crown1: 0x4f7a3f, crown2: 0x5f8f4b, ball: 0x6d9455, rock: 0x9aa3a8 };
+
   function tree(x, y, s) {
     const g = new T.Group();
-    const trunk = new T.Mesh(new T.CylinderGeometry(.45, .65, 7, 6), mat(0x6b4a2a)); trunk.position.y = 3.5;
-    const c1 = new T.Mesh(new T.IcosahedronGeometry(5.6, 0), mat(0x4f7a3f)); c1.position.y = 10;
-    const c2 = new T.Mesh(new T.IcosahedronGeometry(3.9, 0), mat(0x5f8f4b)); c2.position.set(1.4, 13.6, -.8);
+    const trunk = new T.Mesh(geo().trunk, mat(PART_COLOR.trunk)); trunk.position.y = 3.5;
+    const c1 = new T.Mesh(geo().crown1, mat(PART_COLOR.crown1)); c1.position.y = 10;
+    const c2 = new T.Mesh(geo().crown2, mat(PART_COLOR.crown2)); c2.position.set(1.4, 13.6, -.8);
     g.add(trunk, c1, c2);
     g.scale.setScalar(s); g.position.copy(W3(x, y)); g.rotation.y = rnd() * 6.3;
     return shadowed(g);
@@ -2122,21 +2201,59 @@ const replay = (() => {
   function bush(x, y, s) {
     const g = new T.Group();
     [[-1.6, .4, 2.1], [1.6, .7, 1.8], [0, -1, 2.3]].forEach(([bx, bz, r]) => {
-      const m = new T.Mesh(new T.IcosahedronGeometry(r, 0), mat(0x6d9455));
-      m.position.set(bx, r * .7, bz); g.add(m);
+      const m = new T.Mesh(geo().ball, mat(PART_COLOR.ball));
+      m.scale.setScalar(r); m.position.set(bx, r * .7, bz); g.add(m);
     });
     g.scale.setScalar(s); g.position.copy(W3(x, y)); g.rotation.y = rnd() * 6.3;
     return shadowed(g);
   }
   function boulder(x, y, s) {
-    const m = new T.Mesh(new T.IcosahedronGeometry(3.4, 0), mat(0x9aa3a8));
+    const m = new T.Mesh(geo().rock, mat(PART_COLOR.rock));
     m.scale.set(1.2 * s, .65 * s, s); m.position.copy(W3(x, y, 1.2 * s)); m.rotation.y = rnd() * 6.3;
     return shadowed(m);
   }
   function post(x, y) {
-    const m = new T.Mesh(new T.CylinderGeometry(.5, .55, 4, 8), mat(0x8a6a45));
+    const m = new T.Mesh(geo().post, mat(0x8a6a45));
     m.position.copy(W3(x, y, 2));
     return shadowed(m);
+  }
+
+  /* The ring of woods on the horizon: ~70 objects, ~190 parts. As separate
+     meshes that was ~190 draw calls every frame; as one InstancedMesh per part
+     shape it's 5. They sit beyond the shadow camera, so they cast none. */
+  function ringOfWoods(n) {
+    const parts = { trunk: [], crown1: [], crown2: [], ball: [], rock: [] };
+    const G = new T.Matrix4(), P = new T.Matrix4(), Q = new T.Quaternion(), I = new T.Quaternion();
+    const up = new T.Vector3(0, 1, 0), v = (a, b = a, c = a) => new T.Vector3(a, b, c);
+    const add = (name, lx, ly, lz, ls) => {
+      P.compose(v(lx, ly, lz), I, typeof ls === "number" ? v(ls) : ls);
+      parts[name].push(new T.Matrix4().multiplyMatrices(G, P));
+    };
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2, r = 150 + rnd() * 190, x = r * Math.sin(a), y = r * Math.cos(a);
+      const k = rnd();
+      if (k < .62) {
+        const sc = .9 + rnd() * .8;
+        G.compose(W3(x, y), Q.setFromAxisAngle(up, rnd() * 6.3), v(sc));
+        add("trunk", 0, 3.5, 0, 1); add("crown1", 0, 10, 0, 1); add("crown2", 1.4, 13.6, -.8, 1);
+      } else if (k < .88) {
+        const sc = .9 + rnd() * .6;
+        G.compose(W3(x, y), Q.setFromAxisAngle(up, rnd() * 6.3), v(sc));
+        [[-1.6, .4, 2.1], [1.6, .7, 1.8], [0, -1, 2.3]].forEach(([bx, bz, rr]) => add("ball", bx, rr * .7, bz, rr));
+      } else {
+        const sc = .8 + rnd() * .7;
+        G.compose(W3(x, y, 1.2 * sc), Q.setFromAxisAngle(up, rnd() * 6.3), v(1.2 * sc, .65 * sc, sc));
+        add("rock", 0, 0, 0, 1);
+      }
+    }
+    Object.keys(parts).forEach(name => {
+      if (!parts[name].length) return;
+      const im = new T.InstancedMesh(geo()[name], mat(PART_COLOR[name]), parts[name].length);
+      parts[name].forEach((m, i) => im.setMatrixAt(i, m));
+      im.instanceMatrix.needsUpdate = true;
+      im.frustumCulled = false;       // bounds are the unit shape's, not the ring's
+      scene.add(im);
+    });
   }
 
   function makeStick() {
@@ -2207,9 +2324,10 @@ const replay = (() => {
   function build() {
     T = window.THREE;
     renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "low-power" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    // 1.5x is sharp enough for a small panel and saves ~45% of the pixels of 2x
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.shadowMap.type = T.PCFShadowMap;   // soft PCF costs a lot more on cheap GPUs
     renderer.domElement.setAttribute("aria-hidden", "true");
 
     scene = new T.Scene();
@@ -2223,7 +2341,7 @@ const replay = (() => {
     const sun = new T.DirectionalLight(0xfff2da, .72);
     sun.position.set(-110, 170, -70);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(1024, 1024);
     Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 10, far: 520 });
     sun.shadow.camera.updateProjectionMatrix();
     sun.shadow.bias = -.0006;
@@ -2239,11 +2357,7 @@ const replay = (() => {
       L.kind === "tree" ? tree(L.x, L.y, 1.1) : L.kind === "bush" ? bush(L.x, L.y, 1) :
       L.kind === "boulder" ? boulder(L.x, L.y, 1.1) : post(L.x, L.y)));
     // ...plus a ring of woods further out, so the horizon isn't bare
-    for (let i = 0; i < 70; i++) {
-      const a = rnd() * Math.PI * 2, r = 150 + rnd() * 190, x = r * Math.sin(a), y = r * Math.cos(a);
-      const k = rnd();
-      scene.add(k < .62 ? tree(x, y, .9 + rnd() * .8) : k < .88 ? bush(x, y, .9 + rnd() * .6) : boulder(x, y, .8 + rnd() * .7));
-    }
+    ringOfWoods(70);
     scene.add(makeStick());
     walker = makeWalker(); scene.add(walker);
     dyn = new T.Group(); scene.add(dyn);
@@ -2271,6 +2385,9 @@ const replay = (() => {
     renderer.setSize(r.width, r.height, false);
     camera.aspect = r.width / r.height;
     camera.updateProjectionMatrix();
+    // Resizing a canvas wipes it, and both loops only draw when something
+    // changed — so say something changed, or the view stays blank.
+    renderKey = ""; replayKey = "";
   }
 
   // Only ever called on the per-replay layer, which never uses the shared
@@ -2348,6 +2465,7 @@ const replay = (() => {
       prints.setMatrixAt(k * 2 + 1, M);
     });
     prints.instanceMatrix.needsUpdate = true;
+    prints.frustumCulled = false;    // its bounds are one unit circle at the stick
     prints.count = 0;
     prints.userData.at = list.map(p => p.at);
     dyn.add(prints);
@@ -2368,10 +2486,10 @@ const replay = (() => {
     const g = new T.Group(), miss = Math.hypot(end.x, end.y);
     if (miss > 1.5) {
       const dashMat = new T.MeshBasicMaterial({ color: 0xce1126 });
-      const h = hdg(-end.x, -end.y), n = Math.floor(miss / 2.4);
+      const h = hdg(-end.x, -end.y), n = Math.floor(miss / 2.4), dashGeo = new T.BoxGeometry(.38, .04, 1.3);
       for (let k = 0; k < n; k++) {
         const u = (k * 2.4 + .6) / miss;
-        const d = new T.Mesh(new T.BoxGeometry(.38, .04, 1.3), dashMat);
+        const d = new T.Mesh(dashGeo, dashMat);
         d.position.copy(W3(end.x * (1 - u), end.y * (1 - u), .1)); d.rotation.y = -rad(h);
         g.add(d);
       }
@@ -2490,14 +2608,15 @@ const replay = (() => {
   }
 
   /* ---------------------------------------------------------------- loop */
-  let open = false, raf = 0, t = 0, lastNow = 0, capText = null;
+  let open = false, raf = 0, t = 0, lastNow = 0, capText = null, replayKey = "", orbitSpun = 0;
   function caption(p) {
     const k = p.seg.kind, n = plan.legs.length;
     let s;
     if (k === "intro") s = "Your stick, ready to go";
     else if (k === "turn" || k === "walk") s = `Leg ${p.seg.leg + 1} of ${n} · ${plan.legs[p.seg.leg].bearing}°`;
     else if (k === "arrive") s = plan.miss > 1.5 ? "Where's the stick?" : "Right on the stick!";
-    else s = `${plan.miss.toFixed(1)} feet from your stick <span class="st">${"★".repeat(plan.stars)}${"☆".repeat(3 - plan.stars)}</span>`;
+    else s = `${plan.miss.toFixed(1)} feet from your stick <span class="st" aria-hidden="true">` +
+      `${"★".repeat(plan.stars)}${"☆".repeat(3 - plan.stars)}</span><span class="sr">, ${plan.stars} of 3 stars</span>`;
     if (s !== capText) { capText = s; $("replayCap").innerHTML = s; }
   }
 
@@ -2530,7 +2649,11 @@ const replay = (() => {
     markers.forEach(m => { m.s.visible = p.along >= m.at - .01; });
     missGroup.visible = p.seg.kind === "arrive" || p.seg.kind === "finale";
 
-    if (t >= plan.total && orbit.auto && !REDUCED.matches) orbit.yaw += dt * .06;
+    // a slow drift round the finished shape, then stillness (and no more drawing)
+    if (t >= plan.total && orbit.auto && !REDUCED.matches) {
+      orbit.yaw += dt * .06; orbitSpun += dt * .06;
+      if (orbitSpun > 1.2) orbit.auto = false;
+    }
     const goal = camGoal(p);
     const a = 1 - Math.exp(-goal.rate * dt);
     camPos.lerp(goal.pos, a); camLook.lerp(goal.look, a);
@@ -2538,13 +2661,21 @@ const replay = (() => {
 
     const done = t >= plan.total;
     if ($("replayHint").hidden === done) $("replayHint").hidden = !done;
-    if ($("replaySkip").hidden !== done) $("replaySkip").hidden = done;
+    if ($("replaySkip").hidden !== done) {
+      // hiding a focused button drops focus to the page; hand it to Done first
+      if (done && document.activeElement === $("replaySkip")) $("replayDone").focus({ preventScroll: true });
+      $("replaySkip").hidden = done;
+    }
     caption(p);
-    renderer.render(scene, camera);
+    // Same trick as the live view: skip the draw when the picture can't have
+    // changed. Once the replay settles, an open replay costs next to nothing.
+    const rk = [camPos.x, camPos.y, camPos.z, camLook.x, camLook.y, camLook.z, t, L.rotation.x]
+      .map(v => v.toFixed(3)).join();
+    if (rk !== replayKey) { replayKey = rk; renderer.render(scene, camera); }
   }
 
   function startAt(t0) {
-    t = t0; capText = null;
+    t = t0; capText = null; replayKey = ""; orbitSpun = 0;
     orbit.yaw = 0; orbit.pitch = .78; orbit.auto = true;
     // begin high over the whole walk, then swoop down to the stick
     const o = t0 >= plan.total ? orbitPos() : (() => {
@@ -2617,6 +2748,8 @@ const replay = (() => {
     livePrints = new T.InstancedMesh(pg,
       new T.MeshBasicMaterial({ color: 0x4a5f33, transparent: true, opacity: .75 }), MAX_PRINTS * 2);
     livePrints.count = 0;
+    livePrints.frustumCulled = false;  // bounds are one unit circle at the stick,
+                                       // so with the stick off-screen they'd vanish
     liveDyn.add(livePrints);
     // the dashed line ahead of you, like the map's: where the next leg will go.
     // Red until you're lined up, then green.
