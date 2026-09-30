@@ -13,8 +13,9 @@
 
   ONE OPTIONAL LIBRARY. The 3D replay fetches Three.js r128 (~600 KB, ~150 KB
   gzipped) from cdnjs, pinned with a subresource-integrity hash, and only
-  after the player walks their first leg. If it can't load — offline, CDN
-  blocked, no WebGL — the "Watch in 3D" button simply never appears. If your
+  after the player walks their first leg (or presses "3D view" on the map).
+  If it can't load — offline, CDN blocked, no WebGL — the "Watch in 3D" and
+  "3D view" buttons simply never appear, and the 2D map carries on as normal. If your
   site has a Content-Security-Policy, allow https://cdnjs.cloudflare.com in
   script-src for this frame.
 
@@ -127,11 +128,25 @@
 
   /* Settings lives out of the way at the top of the panel — a leader's control,
      not something a Scout needs to walk the triangle. */
-  .panelBar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+  .panelBar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px 14px;margin-bottom:12px}
   .barBtns{display:flex;gap:8px}
-  .levelChip{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-    color:var(--muted);background:#f2f0ea;border-radius:99px;padding:5px 11px}
-  .levelChip b{color:var(--navy)}
+  .legNo{font-size:.9rem;font-weight:700;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+  /* the three steps of a leg. Done = green tick, current = navy, next = plain */
+  .stepper{display:flex;align-items:center;gap:6px;list-style:none;margin:0;padding:0;
+    justify-self:center;width:100%;max-width:440px}
+  .stepper li{margin:0}
+  .stepper .sline{flex:1 1 auto;height:2px;min-width:10px;background:var(--line);border-radius:2px}
+  .stepper .sline.done{background:#a9d9bb}
+  .stp{min-height:38px;padding:0 12px 0 5px;border-radius:99px;border-color:var(--line);
+    color:var(--muted);font-size:.92rem;gap:7px;white-space:nowrap}
+  .stp .sn{width:27px;height:27px;border-radius:99px;display:flex;align-items:center;justify-content:center;
+    background:#f2f0ea;color:var(--muted);font-size:.85rem;font-weight:800}
+  .stp.now{border-color:var(--navy);color:var(--navy);background:#eaf1f7}
+  .stp.now .sn{background:var(--navy);color:#fff}
+  .stp.done{border-color:#a9d9bb;color:var(--green-ink);background:#e8f5ec}
+  .stp.done .sn{background:var(--green);color:#fff}
+  .stp:disabled{opacity:1;cursor:default}
   .ic{width:22px;height:22px;flex:0 0 auto}
   .badgeBtn{min-width:var(--tap);padding:0 10px;gap:5px;border-color:var(--line);color:var(--muted);
     font-size:.95rem;font-variant-numeric:tabular-nums}
@@ -144,16 +159,7 @@
   #compass{touch-action:none}
   #field{touch-action:pan-y}
 
-  /* Captions sit ABOVE each drawing rather than floating on top of it, so they
-     can never overlap the artwork or drift into a letterbox gutter. */
-  .viewHead{
-    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
-    margin:0 0 6px;padding:0 2px;
-    font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-  }
-  .viewName{color:var(--muted)}
-  .viewNorth{color:var(--navy);white-space:nowrap}
-  .swapWrap{display:none;margin-top:10px}
+  .swapWrap{display:none}
 
   /* Desktop: size both drawings by HEIGHT, so they come out exactly the same
      height with no letterbox gutters, then centre the pair inside the panel.
@@ -167,11 +173,17 @@
 
   /* ---------------- controls ---------------- */
   .controls{margin-top:14px}
-  .ctl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:14px;margin-top:12px}
+  /* the one line of instruction: big enough to be the obvious thing to read */
+  .say{font-size:1.2rem;font-weight:700;color:var(--navy);text-align:center;margin:0 0 12px;
+    min-height:1.55em;line-height:1.3}
+  .say .math{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .say small{display:block;font-size:.84rem;font-weight:600;color:var(--muted);margin-top:3px}
+  .ctlRow,.controls .actions{max-width:480px;margin-left:auto;margin-right:auto}
+  .ctlRow + .actions{margin-top:12px}
+  /* settings cards (the gear menu still uses these) */
   .ctl{border:1px solid var(--line);border-radius:10px;padding:12px}
   .ctl-label{display:block;font-size:.78rem;font-weight:700;text-transform:uppercase;
              letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
-  .ctl-sub{display:block;font-size:.88rem;font-weight:500;color:var(--navy);margin-bottom:10px}
   /* number and degree sign share one bordered box, so "255°" reads as a unit */
   .numwrap{display:inline-flex;align-items:center;
     border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 12px 0 6px}
@@ -226,18 +238,7 @@
   select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{
     outline:3px solid var(--gold);outline-offset:2px}
 
-  .status{display:flex;align-items:center;gap:9px;justify-content:center;font-weight:600;
-          font-size:.94rem;border-radius:9px;padding:11px 12px;margin-top:12px}
-  .status.plain{background:#f2f0ea;color:var(--muted)}
-  .status.no{background:#fdeef0;color:var(--red-ink)}
-  .status.yes{background:#e8f5ec;color:var(--green-ink)}
-  .dot{width:10px;height:10px;border-radius:99px;background:currentColor;flex:0 0 auto}
-
-  .step{background:#f6f3ea;border-left:4px solid var(--gold);border-radius:0 9px 9px 0;padding:11px 14px}
-  .step b{color:var(--navy)}
-  .step .math{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy)}
   .warn{color:var(--red-ink);font-size:.89rem;margin-top:6px}
-  .hint{font-size:.82rem;color:var(--muted);text-align:center;max-width:56ch;margin:10px auto 0}
 
   .actions{display:flex;gap:8px;margin-top:12px}
 
@@ -315,24 +316,16 @@
   .levelNote{font-size:.84rem;color:var(--muted);margin:8px 0 0;min-height:2.7em}
   .level.inModal .levelNote{min-height:0}
 
-  /* ---------------- guided first round ---------------- */
-  .guide{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;
-    background:#fff8e6;border:1px solid #e8d79a;border-radius:10px;padding:10px 12px}
-  .guide[hidden]{display:none}
-  .guideNum{flex:0 0 auto;width:30px;height:30px;border-radius:99px;background:var(--gold);color:var(--navy);
-    font-weight:800;display:flex;align-items:center;justify-content:center}
-  .guideText{flex:1 1 220px;font-size:.95rem}
-  .guideText b{color:var(--navy)}
-  .guideBtns{display:flex;gap:8px;flex:0 0 auto}
-  .guideBtns button{min-height:38px;font-size:.88rem}
-  .ctl{transition:opacity .2s,box-shadow .2s,border-color .2s}
-  .ctl.spot{border-color:var(--gold);background:#fffcf2;box-shadow:0 0 0 3px rgba(242,169,0,.4)}
-  .ctl.dim{opacity:.45}
+  /* ---------------- the main button ----------------
+     It carries the status too: grey "Turn 12° right" until you're lined up,
+     then green "Walk 100 feet". One place to look instead of two. */
+  button.primary.go{background:var(--green)}
+  button.primary.go:hover:not(:disabled){background:#1a6b34}
+  button.primary:disabled{opacity:1;background:#e4e8ec;color:#50606d;border-color:#d3d9df}
   button.primary.pulse{animation:pulse 1.3s ease-out infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(242,169,0,.8)}100%{box-shadow:0 0 0 12px rgba(242,169,0,0)}}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(30,122,60,.55)}100%{box-shadow:0 0 0 12px rgba(30,122,60,0)}}
   @media (prefers-reduced-motion:reduce){
-    button.primary.pulse{animation:none;box-shadow:0 0 0 4px rgba(242,169,0,.7)}
-    .ctl{transition:none}
+    button.primary.pulse{animation:none}
   }
 
   /* ---------------- stars and badges ---------------- */
@@ -387,6 +380,15 @@
   .replayBar button{background:rgba(255,255,255,.94);min-height:40px}
   .replayBar button.primary{background:var(--navy);color:#fff}
   .replayBtn{flex:0 0 auto}
+
+  /* ---------------- live 3D view (over the map) ---------------- */
+  .live3d{position:absolute;inset:0;z-index:2;border-radius:10px;overflow:hidden;background:#cfe6f3}
+  .live3d canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+  /* .view svg sizes the big drawings; this one is a badge, so out-rank it */
+  .view svg.liveN{position:absolute;top:8px;right:10px;z-index:3;width:18px;height:24px;max-width:none;margin:0;pointer-events:none}
+  .viewToggle{position:absolute;top:8px;left:8px;z-index:4;min-height:34px;padding:0 12px;
+    font-size:.85rem;background:rgba(255,255,255,.95);border-color:var(--line)}
+  .viewToggle:hover:not(:disabled){background:#eaf1f7}
   @media (max-width:560px){
     .replayBar{flex-wrap:nowrap;gap:6px;padding:8px}
     .replayBar button{flex:1 1 0;min-width:0;min-height:36px;padding:0 6px;font-size:.8rem}
@@ -399,25 +401,32 @@
     body{padding:16px 10px 30px}
     .panel{padding:12px;border-radius:12px}
 
-    .view.big svg{max-height:clamp(230px,44vh,460px)}
+    /* Top bar: leg number and icons on one line, the step chips full width below. */
+    .panelBar{grid-template-columns:auto 1fr;grid-template-areas:"leg btns" "steps steps"}
+    .legNo{grid-area:leg}
+    .barBtns{grid-area:btns;justify-self:end}
+    .stepper{grid-area:steps;max-width:none}
+
+    /* The big view gets the full width. The small one sits in its own row BELOW
+       it, never on top — a rotated baseplate reaches right into the corners, so
+       any overlay there would cover part of the compass. */
+    .stage{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}
+    .view.big{grid-row:1;grid-column:1 / -1}
+    .view.big svg{max-height:clamp(230px,48vh,460px)}
     .view.small{
-      position:absolute;top:6px;right:6px;z-index:3;
-      width:min(44%,168px);padding:4px;
-      background:rgba(255,255,255,.95);border:1px solid var(--line);
-      border-radius:10px;box-shadow:0 3px 10px rgba(20,40,60,.2);
+      grid-row:2;grid-column:1;width:92px;padding:3px;cursor:pointer;
+      background:#fff;border:1px solid var(--line);border-radius:10px;
     }
     .view.small svg{max-height:none}
-    .view.small .viewHead{display:none}
-    /* an inset is too small for numerals — keep only what shows alignment */
+    /* a thumbnail is too small for numerals — keep only what shows alignment */
     .view.small .dialNums,.view.small .plateScale{display:none}
     .view.small .cardinal{font-size:24px}
-    /* footprints, landmarks and stick trimmings turn to mush at inset size */
+    /* footprints, landmarks and stick trimmings turn to mush at thumbnail size */
     .view.small .fieldChrome,.view.small .fieldDetail,.view.small .dotLabel{display:none}
     .view.small #compass{touch-action:pan-y}
 
-    .swapWrap{display:block}
+    .swapWrap{display:block;grid-row:2;grid-column:2}
     .swapWrap button{width:100%}
-    .ctl-grid{grid-template-columns:1fr}
     .settings-grid{grid-template-columns:1fr}
 
     .actions{
@@ -426,6 +435,9 @@
     }
   }
   @media (max-width:430px){
+    .stp{padding:0 9px 0 4px;font-size:.86rem;gap:5px;min-height:34px}
+    .stp .sn{width:24px;height:24px}
+    .say{font-size:1.08rem}
     .btn-row{gap:6px}
     .btn-row button{padding:0 4px}
     .bignum{width:2.7em;font-size:1.45rem}
@@ -510,8 +522,17 @@
 
   <!-- inert until PLAY, so nothing behind the cover can be reached by tabbing -->
   <section class="panel" id="gamePanel" tabindex="-1" inert>
+    <!-- Where you are, at a glance: which leg, which of the three steps.
+         The step chips are buttons, so a player can hop back to "Set dial". -->
     <div class="panelBar">
-      <span class="levelChip" id="levelChip"></span>
+      <span class="legNo" id="legNo">Leg 1 of 3</span>
+      <ol class="stepper" id="stepper" aria-label="Steps for this leg">
+        <li><button type="button" class="stp" data-go="dial"><span class="sn" aria-hidden="true">1</span>Set dial</button></li>
+        <li class="sline" aria-hidden="true"></li>
+        <li><button type="button" class="stp" data-go="turn"><span class="sn" aria-hidden="true">2</span>Turn</button></li>
+        <li class="sline" aria-hidden="true"></li>
+        <li><button type="button" class="stp" data-go="walk"><span class="sn" aria-hidden="true">3</span>Walk</button></li>
+      </ol>
       <span class="barBtns">
         <button class="badgeBtn" id="badgeBtn" type="button" aria-haspopup="dialog" title="Your badges">
           <svg class="ic"><use href="#medal"/></svg><span id="badgeCount">0</span><span class="sr"> badges earned. Open badges</span></button>
@@ -525,20 +546,25 @@
     <!-- ============ STAGE ============ -->
     <div class="stage" id="stage">
       <div class="view v-compass" id="vCompass">
-        <div class="viewHead">
-          <span class="viewName">Your compass</span>
-          <span class="viewNorth">&uarr; North</span>
-        </div>
         <svg id="compass" viewBox="-125 -125 250 250" role="img"
              aria-label="Baseplate compass seen from above. North stays fixed at the top of the screen; the compass turns as you turn."></svg>
       </div>
       <div class="view v-field" id="vField">
-        <div class="viewHead">
-          <span class="viewName">The field from above</span>
-          <span class="viewNorth">&uarr; North</span>
-        </div>
         <svg id="field" viewBox="-138 -140 276 280" role="img"
              aria-label="Top-down view of the field showing your starting stick and the path you have walked."></svg>
+        <!-- optional live 3D view, laid over the map; the toggle only appears
+             once we know WebGL works, and never on Expert -->
+        <div class="live3d" id="live3d" role="img" hidden
+             aria-label="3D view of the field with north at the top, like the map.">
+          <svg class="liveN" viewBox="0 0 20 26" aria-hidden="true"><polygon points="10,1 16,11 4,11" fill="#12395c"/>
+            <text x="10" y="24" text-anchor="middle" font-size="11" font-weight="800" fill="#12395c">N</text></svg>
+        </div>
+        <button class="viewToggle" id="viewToggle" type="button" hidden>3D view</button>
+      </div>
+
+      <!-- phones only: the small view sits beside this, below the big one -->
+      <div class="swapWrap">
+        <button id="swapBtn" type="button">Show map</button>
       </div>
 
       <!-- 3D replay, drawn over both views once a round is finished -->
@@ -556,65 +582,38 @@
       </div>
     </div>
 
-    <div class="swapWrap">
-      <button id="swapBtn" type="button">Make the compass bigger</button>
-    </div>
-    <p class="hint" id="dragHint"></p>
-
-    <!-- ============ CONTROLS ============ -->
+    <!-- ============ CONTROLS ============
+         One line of instruction, one row of buttons for the current step, and
+         one main button that also says what you still need to do. -->
     <div class="controls">
-      <div class="step" id="stepBox" aria-live="polite"></div>
+      <p class="say" id="say" aria-live="polite"></p>
 
-      <!-- only shown during the guided first round -->
-      <div class="guide" id="guideBox" hidden>
-        <span class="guideNum" id="guideNum" aria-hidden="true">1</span>
-        <div class="guideText" id="guideText" aria-live="polite"></div>
-        <div class="guideBtns">
-          <button type="button" id="guideNext" hidden></button>
-          <button type="button" class="ghost" id="guideSkip">Skip the guide</button>
-        </div>
+      <div class="btn-row ctlRow" id="rowDial" role="group" aria-label="Set the dial">
+        <button type="button" data-dial="-10" title="10&deg; lower" aria-label="Turn the dial 10 degrees lower"><svg class="ar two"><use href="#tri2"/></svg></button>
+        <button type="button" data-dial="-1" title="1&deg; lower" aria-label="Turn the dial 1 degree lower"><svg class="ar one"><use href="#tri1"/></svg></button>
+        <span class="numwrap">
+          <input type="number" class="bignum" id="dialInput" inputmode="numeric"
+                 min="0" max="359" step="1" value="15" aria-label="Bearing on the dial, in degrees">
+          <span class="deg">&deg;</span>
+        </span>
+        <button type="button" data-dial="1" title="1&deg; higher" aria-label="Turn the dial 1 degree higher"><svg class="ar one flip"><use href="#tri1"/></svg></button>
+        <button type="button" data-dial="10" title="10&deg; higher" aria-label="Turn the dial 10 degrees higher"><svg class="ar two flip"><use href="#tri2"/></svg></button>
       </div>
 
-      <div class="ctl-grid">
-        <div class="ctl" id="ctlDial">
-          <span class="ctl-label">Step 1 &middot; Turn the dial to your desired bearing</span>
-          <span class="ctl-sub">Just the numbered ring turns &mdash; you stay facing the same way.</span>
-          <div class="btn-row">
-            <button type="button" data-dial="-10" title="10&deg; lower" aria-label="Turn the dial 10 degrees lower"><svg class="ar two"><use href="#tri2"/></svg></button>
-            <button type="button" data-dial="-1" title="1&deg; lower" aria-label="Turn the dial 1 degree lower"><svg class="ar one"><use href="#tri1"/></svg></button>
-            <span class="numwrap">
-              <input type="number" class="bignum" id="dialInput" inputmode="numeric"
-                     min="0" max="359" step="1" value="15" aria-label="Bearing on the dial, in degrees">
-              <span class="deg">&deg;</span>
-            </span>
-            <button type="button" data-dial="1" title="1&deg; higher" aria-label="Turn the dial 1 degree higher"><svg class="ar one flip"><use href="#tri1"/></svg></button>
-            <button type="button" data-dial="10" title="10&deg; higher" aria-label="Turn the dial 10 degrees higher"><svg class="ar two flip"><use href="#tri2"/></svg></button>
-          </div>
-        </div>
-
-        <div class="ctl" id="ctlFace">
-          <span class="ctl-label">Step 2 &middot; Turn yourself until the needle lines up</span>
-          <span class="ctl-sub">Put red in the shed. Turn the whole compass but keep the bearing set.</span>
-          <div class="btn-row">
-            <button type="button" data-face="-10" title="10&deg; left" aria-label="Turn yourself 10 degrees left"><svg class="ar two"><use href="#tri2"/></svg></button>
-            <button type="button" data-face="-1" title="1&deg; left" aria-label="Turn yourself 1 degree left"><svg class="ar one"><use href="#tri1"/></svg></button>
-            <span class="numwrap" id="faceOutRow">
-              <input type="number" class="bignum" id="faceInput" inputmode="numeric"
-                     min="0" max="359" step="1" value="0" aria-label="Direction you are facing, in degrees">
-              <span class="deg">&deg;</span>
-            </span>
-            <button type="button" data-face="1" title="1&deg; right" aria-label="Turn yourself 1 degree right"><svg class="ar one flip"><use href="#tri1"/></svg></button>
-            <button type="button" data-face="10" title="10&deg; right" aria-label="Turn yourself 10 degrees right"><svg class="ar two flip"><use href="#tri2"/></svg></button>
-          </div>
-        </div>
-      </div>
-
-      <div class="status no" id="alignStatus" aria-live="polite">
-        <span class="dot"></span><span>Turn yourself 15° right — leave the dial alone</span>
+      <div class="btn-row ctlRow" id="rowFace" role="group" aria-label="Turn yourself" hidden>
+        <button type="button" data-face="-10" title="10&deg; left" aria-label="Turn yourself 10 degrees left"><svg class="ar two"><use href="#tri2"/></svg></button>
+        <button type="button" data-face="-1" title="1&deg; left" aria-label="Turn yourself 1 degree left"><svg class="ar one"><use href="#tri1"/></svg></button>
+        <span class="numwrap" id="faceOutRow">
+          <input type="number" class="bignum" id="faceInput" inputmode="numeric"
+                 min="0" max="359" step="1" value="0" aria-label="Direction you are facing, in degrees">
+          <span class="deg">&deg;</span>
+        </span>
+        <button type="button" data-face="1" title="1&deg; right" aria-label="Turn yourself 1 degree right"><svg class="ar one flip"><use href="#tri1"/></svg></button>
+        <button type="button" data-face="10" title="10&deg; right" aria-label="Turn yourself 10 degrees right"><svg class="ar two flip"><use href="#tri2"/></svg></button>
       </div>
 
       <div class="actions">
-        <button class="primary" id="walkBtn" type="button">Walk 100 feet</button>
+        <button class="primary" id="walkBtn" type="button">Next</button>
         <button class="ghost" id="resetBtn" type="button">Start over</button>
         <button class="replayBtn" id="replayBtn" type="button" hidden>
           <svg class="ic" aria-hidden="true"><use href="#play"/></svg><span>Watch in 3D</span></button>
@@ -635,40 +634,35 @@
       <button class="iconBtn" value="close" aria-label="Close instructions">&times;</button>
     </div>
 
-    <p class="lead"><b>The goal:</b> Starting at a stick, walk three legs of 100 feet, turning 120&deg; each time. Finish standing next to the stick where you started.</p>
+    <p class="lead"><b>The goal:</b> walk three legs of 100 feet and end up back at the stick
+      where you started.</p>
 
+    <h3>Every leg is three steps</h3>
     <ol class="helpSteps">
-      <li><b>Pick any bearing</b> for your first leg. Turn the dial to it.</li>
-      <li><b>Turn yourself</b> until the red needle sits inside the red shed. The shed lights up
-        when you're lined up.</li>
-      <li><b>Press "Walk 100 feet".</b> Footprints appear as you go &mdash; one every 10 feet.</li>
-      <li><b>Add or subtract 120&deg;</b> from that bearing. Set the dial to the new number.
-        On this leg, either one works.</li>
-      <li><b>Keep turning the same way</b> for the last leg. Swapping directions won't bring you home.</li>
-      <li><b>Line up and walk</b> each new leg. After the third, see how close you got.</li>
+      <li><b>Set dial.</b> Turn the numbered ring to your bearing, then press <b>Next</b>.</li>
+      <li><b>Turn.</b> Turn yourself until the red needle sits inside the red shed.</li>
+      <li><b>Walk.</b> The big button turns green. Press it.</li>
     </ol>
 
-    <p class="helpTip">Gone over 360&deg;? Subtract 360. Dropped below 0&deg;? Add 360.</p>
-
-    <h3>Ways to turn things</h3>
+    <h3>Which bearing?</h3>
     <ul>
-      <li>Twist the <b>numbered dial</b> to set your bearing.</li>
-      <li>Twist the <b>clear baseplate</b> to turn yourself.</li>
-      <li><b>Swipe across the field</b> to turn, or tap a spot to face it.</li>
-      <li>Or use the <b>arrow buttons</b> under each step.</li>
+      <li><b>Leg 1:</b> any bearing you like.</li>
+      <li><b>Leg 2:</b> add or subtract 120&deg;. Either one works.</li>
+      <li><b>Leg 3:</b> keep going the same way: add again, or subtract again.</li>
+    </ul>
+    <p class="helpTip">Over 360&deg;? Subtract 360. Below 0&deg;? Add 360.</p>
+
+    <h3>Ways to turn</h3>
+    <ul>
+      <li>Twist the <b>numbered ring</b> to set the dial.</li>
+      <li>Twist the <b>clear baseplate</b>, or swipe the map, to turn yourself.</li>
+      <li>Or use the <b>arrow buttons</b>.</li>
+      <li>Press <b>3D view</b> on the map to see the field in 3D. North is still at the top.</li>
     </ul>
 
-    <h3>Too hard? Too easy?</h3>
-    <p>Pick <b>Beginner</b>, <b>Scout</b> or <b>Expert</b> on the title screen, or any time from the
-      <b>gear button</b>. Beginner coaches you while you line up and works out the bearing math for you.
-      Your first round is a guided one on Beginner and Scout.</p>
-
-    <h3>Stars and badges</h3>
-    <p>Finish within 10 feet of your stick for <b>3 stars</b>, 25 feet for 2, and 50 feet for 1.
-      Special challenges earn badges. Tap the <b>medal button</b> to see them all.</p>
-
-    <p class="helpNote">The needle always points north &mdash; it never moves. The compass turns
-      around it, exactly as it would in your hands.</p>
+    <h3>Levels, stars and badges</h3>
+    <p><b>Beginner</b> tells you the next bearing and which way to turn. Change level with the
+      <b>gear button</b>. Land within 10 feet for 3 stars. The <b>medal button</b> shows your badges.</p>
 
     <div class="modalFoot">
       <button class="primary" value="close">Got it</button>
@@ -733,8 +727,8 @@
       </div>
       <div class="ctl">
         <span class="ctl-label">Make it easier</span>
-        <label class="chk"><input type="checkbox" id="showHints" autocomplete="off"> Coach me while I line up</label>
-        <label class="chk"><input type="checkbox" id="showMath" autocomplete="off"> Show me the bearing math</label>
+        <label class="chk"><input type="checkbox" id="showHints" autocomplete="off"> Tell me which way to turn</label>
+        <label class="chk"><input type="checkbox" id="showMath" autocomplete="off"> Tell me the next bearing</label>
         <label class="chk"><input type="checkbox" id="showFace" autocomplete="off" checked> Show the degrees I'm facing</label>
         <label class="chk"><input type="checkbox" id="snapOn" autocomplete="off" checked> Snap into line when I'm close</label>
       </div>
@@ -854,8 +848,8 @@ const S = {
   snap: true, sound: true,
   preset: "scout",
   guided: false,          // the walkthrough round; decided when PLAY is pressed
-  guideDialOK: false,     // leg 1 only: they've settled on a starting bearing
-  bigView: "field",
+  dialOK: false,          // step 1 done for this leg: they've settled on a bearing
+  bigView: "compass",     // phones: the compass is where steps 1 and 2 happen
   started: false,                     // false while the title cover is up
   animating: false, finished: false
 };
@@ -867,11 +861,11 @@ const S = {
    ============================================================================ */
 const PRESETS = {
   beginner: { name: "Beginner", sloppyIdx: 1, showHints: true,  showMath: true,  showFace: true,  snap: true,
-    note: "Coaching while you line up, the bearing math worked out for you, and extra-steady hands." },
+    note: "Tells you the next bearing and which way to turn. Extra-steady hands." },
   scout:    { name: "Scout",    sloppyIdx: 2, showHints: false, showMath: false, showFace: true,  snap: true,
-    note: "You do the bearing math. Realistic wobble, just like a real field. The classic game." },
+    note: "You work out each bearing yourself. Realistic wobble. The classic game." },
   expert:   { name: "Expert",   sloppyIdx: 2, showHints: false, showMath: false, showFace: false, snap: false,
-    note: "No degree readout and no snapping — read the compass itself. No guided round." }
+    note: "No degree readout and no snapping. Read the compass itself." }
 };
 const PRESET_KEYS = ["sloppyIdx", "showHints", "showMath", "showFace", "snap"];
 const matchPreset = () =>
@@ -1293,6 +1287,14 @@ function buildField() {
   const sct = el("text", { x: 25, y: -6, "text-anchor": "middle", fill: "#5d6f7d", "font-size": "9" });
   sct.textContent = "50 ft"; sc.appendChild(sct); chrome.appendChild(sc);
 
+  // north marker: the only label the map needs, now the captions are gone
+  const nm = el("g", { transform: "translate(122,-120)" });
+  nm.appendChild(el("polygon", { points: "0,-9 5,1 -5,1", fill: "#12395c" }));
+  const nt = el("text", { x: 0, y: 11, "text-anchor": "middle", fill: "#12395c",
+    "font-size": "10", "font-weight": "800" });
+  nt.textContent = "N"; nm.appendChild(nt);
+  chrome.appendChild(nm);
+
   // footprint legend — this is what turns the prints into a measuring tool
   const lg = el("g", { transform: "translate(-124,124)" });
   const fp = makePrint();
@@ -1321,7 +1323,7 @@ function renderMotion() {
    every pointermove. During a drag only `facing`/`dial` change, and none of these
    layers depend on those — so fingerprint what they DO depend on and skip the
    work when it is unchanged. Turns a per-frame rebuild into a string compare. */
-let fieldKey = null, stepHTML = null;
+let fieldKey = null;
 function renderField(force) {
   const key = `${S.leg}|${S.finished}|${S.trail.length}|${S.legs}|${S.used.join(",")}`;
   if (!force && key === fieldKey) { renderMotion(); return; }
@@ -1380,11 +1382,9 @@ function renderField(force) {
    ============================================================================ */
 function applyLayout() {
   const vC = $("vCompass"), vF = $("vField");
-  /* Class swaps only — no DOM reordering. Re-appending a view dragged its whole
-     subtree through detach/attach plus a full relayout, a visible hitch on the
-     phone's swap button. It was never needed: the inset is absolutely positioned
-     with z-index, so it stacks above the big view whatever the document order,
-     and the desktop's left-to-right order is simply the order in the markup. */
+  /* Class swaps only — no DOM reordering. On phones the grid places the big
+     view on the first row and the small one in the row below, whatever their
+     order in the markup; on desktop both are big and sit side by side. */
   if (!NARROW.matches) {
     vC.className = "view v-compass big";
     vF.className = "view v-field big";
@@ -1393,10 +1393,8 @@ function applyLayout() {
     vC.className = "view v-compass " + (compassBig ? "big" : "small");
     vF.className = "view v-field " + (compassBig ? "small" : "big");
   }
-  $("swapBtn").textContent = S.bigView === "compass" ? "Make the field bigger" : "Make the compass bigger";
-  $("dragHint").textContent = (!NARROW.matches || S.bigView === "field")
-    ? "Twist the numbered dial to set your bearing; twist the clear baseplate to turn yourself. On the field, swipe to turn or tap a spot to face it."
-    : "Twist the numbered dial to set your bearing. Twist the clear baseplate to turn yourself.";
+  $("swapBtn").textContent = S.bigView === "compass" ? "Show map" : "Show compass";
+  replay.syncBtn();          // the 3D view pauses while the map is only a thumbnail
 }
 function swapViews() { S.bigView = S.bigView === "compass" ? "field" : "compass"; applyLayout(); }
 $("swapBtn").addEventListener("click", swapViews);
@@ -1417,156 +1415,118 @@ const setText = (n, t) => { if (n.textContent !== t) n.textContent = t; };
 const setAttr = (n, k, v) => { const t = String(v); if (n.getAttribute(k) !== t) n.setAttribute(k, t); };
 const setClass = (n, c) => { if (n.className !== c) n.className = c; };
 
-let wasAligned = false;
+/* ============================================================================
+   STEPS
+   Each leg is three steps: set the dial, turn yourself, walk. The step is
+   worked out from the game state every time rather than stored, so it can
+   never disagree with what's on screen. Twist the ring mid-turn and you're
+   simply back on step 1; line up and you're on step 3.
+   ============================================================================ */
+function phase() {
+  if (S.finished) return "done";
+  if (S.animating) return "wait";
+  if (!S.dialOK) return "dial";
+  return aligned() ? "walk" : "turn";
+}
+const STEP_INDEX = { dial: 0, turn: 1, walk: 2, wait: 2, done: 3 };
+
+/* The one line of instruction: one idea at a time, in plain words. */
+function sayFor(ph) {
+  if (ph === "done") return "";
+  if (ph === "wait") return "Walking…";
+  if (ph === "turn") return "Turn the entire compass until “red is in the shed”";
+  if (ph === "walk") return "Red is in the shed. Walk!";
+  if (S.leg === 0) return "Pick any bearing to start by turning the dial";
+  const prev = S.used[S.leg - 1], exps = expectedBearings(), dir = turnDir();
+  const open = S.leg === 1 || dir === 0;             // either direction still works
+  const deg = v => `<span class="math">${v}°</span>`;
+  if (mathOn()) return `Turn the dial to ${exps.map(deg).join(" or ")}`;
+  let h = open
+    ? `Your last bearing was ${deg(prev)}. Turn the dial to add or subtract ${S.turn}°`
+    : `Your last bearing was ${deg(prev)}. Turn the dial to ${dir > 0 ? "add" : "subtract"} ${S.turn}° again`;
+  // The wrap-around rule, only on the legs where it actually comes up
+  const raws = open ? [prev + S.turn, prev - S.turn] : [prev + dir * S.turn];
+  if (raws.some(r => r >= 360)) h += `<small>Total over 360°? Subtract 360.</small>`;
+  else if (raws.some(r => r < 0)) h += `<small>Total below 0°? Add 360.</small>`;
+  return h;
+}
+
+let wasAligned = false, sayHTML = null;
 function syncUI() {
   setVal("dialInput", S.dial);
   setVal("faceInput", faceDeg());
   const vis = faceOn() ? "" : "hidden";
   if ($("faceOutRow").style.visibility !== vis) $("faceOutRow").style.visibility = vis;
 
-  const ok = aligned(), st = $("alignStatus");
+  const ok = aligned(), ph = phase();
   // A click the moment red drops into the shed: the sound says "stop turning"
   // before the eye has caught up, which is most of what makes lining up easy.
   if (ok && !wasAligned && S.started && !S.finished && !S.animating) { sfx.click(); buzz(15); }
   wasAligned = ok;
-  if (ok) {
-    setClass(st, "status yes");
-    setText(st.lastElementChild, "Red is in the shed — you're lined up");
-  } else if (coachOn()) {
+
+  /* ---- the one line ---- */
+  const html = sayFor(ph);
+  if (html !== sayHTML) { sayHTML = html; $("say").innerHTML = html; }
+  if ($("say").hidden !== (ph === "done")) $("say").hidden = ph === "done";
+
+  /* ---- only the current step's buttons ---- */
+  const showDial = ph === "dial", showFace = ph === "turn" || ph === "walk" || ph === "wait";
+  if ($("rowDial").hidden === showDial) $("rowDial").hidden = !showDial;
+  if ($("rowFace").hidden === showFace) $("rowFace").hidden = !showFace;
+
+  /* ---- the main button: it's also the status ---- */
+  const wb = $("walkBtn");
+  let label, disabled = false;
+  if (ph === "done") label = "Play again";
+  else if (ph === "wait") { label = "Walking…"; disabled = true; }
+  else if (ph === "dial") label = "Next";
+  else if (ph === "walk") label = `Walk ${LEG_FT} feet`;
+  else {
+    disabled = true;
     // Signed error, not the needle's reading against the dial. The dial reading
     // wraps — two degrees past the bearing shows as 358, which looks like you
     // are nowhere near when you are almost there. This says how far and which way.
-    setClass(st, "status no");
     const off = ((S.dial - S.facing + 540) % 360) - 180;   // + = turn right
-    const deg = Math.max(1, Math.round(Math.abs(off)));
-    setText(st.lastElementChild,
-      `Turn yourself ${deg}° ${off > 0 ? "right" : "left"} — leave the dial alone`);
-  } else {
-    // Coaching off: a neutral prompt, so the chip never moves and never tells
-    // them how far off they are. The shed lighting up is the real signal.
-    setClass(st, "status plain");
-    setText(st.lastElementChild, "Line up the needle to walk");
+    label = coachOn()
+      ? `Turn ${Math.max(1, Math.round(Math.abs(off)))}° ${off > 0 ? "right" : "left"}`
+      : "Line up the needle";
   }
+  if (wb.disabled !== disabled) wb.disabled = disabled;
+  setText(wb, label);
+  wb.classList.toggle("go", ph === "walk");
+  wb.classList.toggle("pulse", ph === "walk" && S.guided);
+  if ($("resetBtn").hidden !== S.finished) $("resetBtn").hidden = S.finished;
 
-  /* Built as one string and written only when it changes. An innerHTML assignment
-     is an HTML parse plus a subtree teardown plus a layout invalidation, and
-     syncUI() runs on every pointermove — where this string is byte-identical
-     frame after frame, because it depends on none of what a drag alters. */
-  let html;
-  if (S.finished) {
-    html = "<b>Round complete.</b> Check your result below, then start over with a new bearing.";
-  } else if (S.leg === 0) {
-    html = `<b>Leg 1 of ${S.legs}.</b> Plant your stick, pick any bearing you like, ` +
-      `line up the needle, and walk ${LEG_FT} feet.`;
-  } else {
-    const prev = S.used[S.leg - 1], exps = expectedBearings(), dir = turnDir();
-    const open = S.leg === 1 || dir === 0;          // both directions still valid?
+  /* ---- where you are: leg number and the three step chips ---- */
+  setText($("legNo"), S.finished ? "Round done" : `Leg ${S.leg + 1} of ${S.legs}`);
+  const at = STEP_INDEX[ph];
+  document.querySelectorAll("#stepper .stp").forEach((b, i) => {
+    setClass(b, "stp" + (i < at ? " done" : i === at ? " now" : ""));
+    setText(b.firstElementChild, i < at ? "✓" : String(i + 1));
+    // Back to "Set dial" from a later step, or ahead to "Turn" from the first.
+    // Walking only ever happens from the main button.
+    const can = ph !== "done" && ph !== "wait" && (i === 0 ? at > 0 : i === 1 ? at === 0 : false);
+    if (b.disabled === can) b.disabled = !can;
+    if (i === at) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+  });
+  document.querySelectorAll("#stepper .sline").forEach((l, i) => l.classList.toggle("done", i < at));
 
-    // The dial still shows the previous bearing until they move it, but the
-    // moment they start turning it that number is gone — so always state it.
-    let h = `<b>Leg ${S.leg + 1} of ${S.legs}.</b> Your last bearing was ` +
-            `<span class="math">${prev}&deg;</span>. `;
-    h += open
-      ? `Add <em>or</em> subtract ${S.turn}&deg; &mdash; on this leg either one works.`
-      : `Turn the same way you did last time &mdash; another ${S.turn}&deg;.`;
-
-    if (mathOn()) {
-      const sum = d => {
-        const raw = prev + d * S.turn, res = norm(raw);
-        let t = `${prev}&deg; ${d > 0 ? "+" : "&minus;"} ${S.turn}&deg; = ${raw}&deg;`;
-        if (raw >= 360) t += `, then ${raw} &minus; 360 = ${res}&deg;`;
-        if (raw < 0) t += `, then ${raw} + 360 = ${res}&deg;`;
-        return t;
-      };
-      h += `<br><span class="math">` +
-           (open ? `${sum(1)}&nbsp;&nbsp;or&nbsp;&nbsp;${sum(-1)}` : sum(dir)) + `</span>`;
-    } else {
-      h += ` If you go over 360&deg;, subtract 360. If you drop below 0&deg;, add 360.`;
-    }
-    html = h;
-    // In the guided round the guide box already says "set the dial to X", so
-    // a red warning on top of it would read as a telling-off, not help.
-    if (coachOn() && !S.guided && !exps.includes(S.dial)) {
-      html += `<div class="warn">Your dial says ${S.dial}&deg;. Double-check that math — you can ` +
-              `still walk it, but you probably won't find your stick.</div>`;
-    }
-  }
-  if (html !== stepHTML) { stepHTML = html; $("stepBox").innerHTML = html; }
-  // Once the round is over the result panel says it all; hiding the prompt
-  // also buys back the height the stars and badges need inside the iframe.
-  if ($("stepBox").hidden !== S.finished) $("stepBox").hidden = S.finished;
-  if (st.hidden !== S.finished) st.hidden = S.finished;
-
-  const wb = $("walkBtn");
-  wb.disabled = S.animating || (!S.finished && !ok);
-  setText(wb, S.finished ? "Play again" : `Walk ${LEG_FT} feet`);
-  $("resetBtn").hidden = S.finished;
-
-  syncGuide();
-  syncLevelChip();
   replay.syncBtn();
   drawCompass();
   renderField();
 }
 
-/* ============================================================================
-   GUIDED FIRST ROUND
-   The phase is worked out from the game state every time rather than stored,
-   so it can never fall out of step with what's on screen — undo a step and the
-   guide simply steps back with you.
-   ============================================================================ */
-function guidePhase() {
-  if (!S.guided || S.finished || !S.started) return null;
-  if (S.animating) return "wait";
-  const needDial = S.leg === 0 ? !S.guideDialOK : !expectedBearings().includes(S.dial);
-  if (needDial) return "dial";
-  return aligned() ? "walk" : "turn";
+function primaryAction() {
+  const ph = phase();
+  if (ph === "done") reset();
+  else if (ph === "dial") { S.dialOK = true; syncUI(); }
+  else if (ph === "walk") walk();
 }
-let guideHTML = null;
-function syncGuide() {
-  const phase = guidePhase(), box = $("guideBox");
-  const show = phase !== null;
-  if (box.hidden === show) box.hidden = !show;
-
-  const cd = $("ctlDial"), cf = $("ctlFace"), wb = $("walkBtn");
-  setClass(cd, "ctl" + (phase === "dial" ? " spot" : phase === "turn" || phase === "walk" ? " dim" : ""));
-  setClass(cf, "ctl" + (phase === "turn" ? " spot" : phase === "dial" || phase === "walk" ? " dim" : ""));
-  wb.classList.toggle("pulse", phase === "walk");
-  if (!show || phase === "wait") return;
-
-  const num = { dial: "1", turn: "2", walk: "3" }[phase];
-  let html, next = "";
-  if (phase === "dial" && S.leg === 0) {
-    html = `<b>Set the dial.</b> Any bearing works for your first leg. Twist the numbered ring, ` +
-           `or use the Step 1 arrows. Happy with ${S.dial}&deg;?`;
-    next = `Use ${S.dial}°`;
-  } else if (phase === "dial") {
-    const exps = expectedBearings();
-    html = `<b>Set the dial to your new bearing:</b> ` +
-           exps.map(v => `<span class="math">${v}&deg;</span>`).join(" or ") +
-           `. The math is worked out for you above.`;
-  } else if (phase === "turn") {
-    html = `<b>Now turn yourself.</b> Leave the dial at ${S.dial}&deg;. Twist the clear baseplate, ` +
-           `or use the Step 2 arrows, until the red needle sits inside the red shed.`;
-  } else {
-    html = `<b>Red is in the shed!</b> Press <b>Walk ${LEG_FT} feet</b>.`;
-  }
-  setText($("guideNum"), num);
-  if (html !== guideHTML) { guideHTML = html; $("guideText").innerHTML = html; }
-  const nb = $("guideNext");
-  nb.hidden = !next;
-  if (next) setText(nb, next);
-}
-$("guideNext").addEventListener("click", () => { S.guideDialOK = true; syncUI(); });
-$("guideSkip").addEventListener("click", () => { S.guided = false; syncUI(); });
-
-function syncLevelChip() {
-  const name = S.preset in PRESETS ? PRESETS[S.preset].name : "Custom";
-  // literal "·", not &middot;, so the innerHTML read-back compares equal
-  const html = `Level: <b>${name}</b>` + (S.guided ? " · guided round" : "");
-  const c = $("levelChip");
-  if (c.innerHTML !== html) c.innerHTML = html;
-}
+document.querySelectorAll("#stepper .stp").forEach(b => b.addEventListener("click", () => {
+  const go = b.dataset.go, ph = phase();
+  if (go === "dial" && (ph === "turn" || ph === "walk")) { S.dialOK = false; syncUI(); }
+  else if (go === "turn" && ph === "dial") { S.dialOK = true; syncUI(); }
+}));
 
 /* ============================================================================
    WALKING
@@ -1599,7 +1559,6 @@ function swingToNorth() {
 }
 
 function walk() {
-  if (S.finished && !S.animating) { reset(); return; }   // the button reads "Play again"
   if (S.animating || S.finished || !aligned()) return;
   snapGen++;                                              // a snap mid-flight gives way
   replay.load();       // fetch Three.js in the background now they're playing for real
@@ -1633,6 +1592,7 @@ function walk() {
     stampTo(dist);
     S.pos = to; S.trail[idx] = { ...to };
     S.leg++;
+    S.dialOK = false;                     // every new leg starts back at step 1
     S.animating = false;
     // the dial deliberately stays put — adding the turn is the Scout's job
     if (S.leg >= S.legs) { S.finished = true; showResult(); syncUI(); }
@@ -1689,8 +1649,8 @@ function showResult() {
     : spare[0];
   const levelName = S.preset in PRESETS ? PRESETS[S.preset].name : "your custom";
   let tip = "";
-  if (S.guided) {
-    tip = `<div class="tip">That was your guided round. Press <b>Play again</b> to go it alone ` +
+  if (S.guided && S.preset !== "beginner") {
+    tip = `<div class="tip">Your first round had extra help. <b>Play again</b> to try it ` +
           `at <b>${levelName}</b> level.</div>`;
   } else if (d > 25 && spare.length) {
     tip = `<div class="tip">Tricky one? Switch to <b>Beginner</b> with the <b>gear button</b> ` +
@@ -1779,11 +1739,11 @@ function renderBadgeModal() {
 function reset() {
   S.leg = 0; S.pos = { x: 0, y: 0 }; S.trail = [{ x: 0, y: 0 }];
   S.used = []; S.finished = false; S.animating = false;
-  S.guideDialOK = false; guideHTML = null; snapGen++;
+  S.dialOK = false; sayHTML = null; snapGen++;
   replay.hide(false);
   S.facing = 0; animGen++;                  // abandons any animation in flight
   gPrints.textContent = ""; printCount = 0;
-  fieldKey = stepHTML = null;               // furniture and prompt rebuilt after a reset
+  fieldKey = null;                          // furniture rebuilt after a reset
   $("result").className = "result";
   syncUI();
 }
@@ -1791,11 +1751,12 @@ function reset() {
 /* ============================================================================
    CONTROLS
    ============================================================================ */
-function setDial(v) { S.dial = norm(Math.round(v)); syncUI(); }
+// Touching the dial always means step 1 — even mid-turn, so grabbing the ring
+// by mistake sends you back to "Set dial" rather than silently moving the goal.
+function setDial(v) { S.dial = norm(Math.round(v)); S.dialOK = false; syncUI(); }
 function setFace(v) {
   snapGen++;                                // the player's hand beats the snap
-  // Leg 1 of the guided round: turning yourself means they've settled on a bearing
-  if (S.guided && S.leg === 0) S.guideDialOK = true;
+  S.dialOK = true;                          // turning yourself means the dial is set
   S.facing = norm(v); syncUI();
 }
 
@@ -1853,7 +1814,7 @@ const numeric = (id, apply) => {
 };
 numeric("dialInput", v => setDial(v));
 numeric("faceInput", v => setFace(Math.round(v)));
-$("walkBtn").addEventListener("click", walk);
+$("walkBtn").addEventListener("click", primaryAction);
 $("resetBtn").addEventListener("click", reset);
 
 /* ---- compass gestures -----------------------------------------------------
@@ -2110,6 +2071,7 @@ const replay = (() => {
   function syncBtn() {
     const b = $("replayBtn"), show = S.finished && status !== "failed";
     if (b.hidden === show) b.hidden = !show;
+    syncLive();
   }
 
   /* ---------------------------------------------------------------- scene */
@@ -2280,15 +2242,26 @@ const replay = (() => {
     scene.add(makeStick());
     walker = makeWalker(); scene.add(walker);
     dyn = new T.Group(); scene.add(dyn);
-    $("replay").prepend(renderer.domElement);
+    liveInit();
     wireOrbit(renderer.domElement);
-    if (window.ResizeObserver) new ResizeObserver(resize).observe($("replay"));
-    else window.addEventListener("resize", resize);
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(resize);
+      ro.observe($("replay")); ro.observe($("live3d"));
+    } else window.addEventListener("resize", resize);
   }
 
+  /* One renderer, one canvas, moved between the replay overlay and the live
+     view. A second WebGL context would double the GPU memory on exactly the
+     cheap devices that have least of it. */
+  let host = null;
+  function attach(el) {
+    host = el;
+    if (renderer.domElement.parentNode !== el) el.prepend(renderer.domElement);
+    resize();
+  }
   function resize() {
-    if (!renderer) return;
-    const r = $("replay").getBoundingClientRect();
+    if (!renderer || !host) return;
+    const r = host.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
     renderer.setSize(r.width, r.height, false);
     camera.aspect = r.width / r.height;
@@ -2381,9 +2354,13 @@ const replay = (() => {
       dyn.add(s); markers.push({ s, at: plan.cum[i + 1] });
     });
 
-    // the miss: a dashed red line back to the stick and how far it is
-    missGroup = new T.Group(); missGroup.visible = false;
-    const { end, miss } = plan;
+    missGroup = missLine(plan.end); missGroup.visible = false;
+    dyn.add(missGroup);
+  }
+
+  // the miss: a dashed red line back to the stick and how far it is
+  function missLine(end) {
+    const g = new T.Group(), miss = Math.hypot(end.x, end.y);
     if (miss > 1.5) {
       const dashMat = new T.MeshBasicMaterial({ color: 0xce1126 });
       const h = hdg(-end.x, -end.y), n = Math.floor(miss / 2.4);
@@ -2391,19 +2368,19 @@ const replay = (() => {
         const u = (k * 2.4 + .6) / miss;
         const d = new T.Mesh(new T.BoxGeometry(.38, .04, 1.3), dashMat);
         d.position.copy(W3(end.x * (1 - u), end.y * (1 - u), .1)); d.rotation.y = -rad(h);
-        missGroup.add(d);
+        g.add(d);
       }
       // over the stick, not the midpoint: on a near miss the midpoint is right
       // on top of the walker, and the tag would hide them
       const tag = label(`${miss.toFixed(1)} ft`, { bg: "#ce1126", h: 3.4 });
       tag.position.copy(W3(0, 0, 11));
-      missGroup.add(tag);
+      g.add(tag);
     } else {
       const tag = label("On the stick!", { bg: "#1e7a3c", h: 3.4 });
       tag.position.copy(W3(0, 0, 11));
-      missGroup.add(tag);
+      g.add(tag);
     }
-    dyn.add(missGroup);
+    return g;
   }
 
   /* Where everything is at time t. Worked out from scratch each frame, so
@@ -2460,18 +2437,51 @@ const replay = (() => {
   }
 
   function wireOrbit(cv) {
+    // Live view: swipe to turn and tap a spot to face it, exactly like the 2D
+    // map. Replay: drag to orbit once it has finished.
+    let lv = null;
+    const ray = new T.Raycaster(), ground = new T.Plane(new T.Vector3(0, 1, 0), 0);
+    const hit = new T.Vector3(), ndc = new T.Vector2();
     cv.addEventListener("pointerdown", e => {
+      if (!open) {
+        if (S.finished || S.animating) return;
+        lv = { lastX: e.clientX, downX: e.clientX, downY: e.clientY, moved: 0 };
+        try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
       if (t < plan.total) return;
       orbit.drag = true; orbit.auto = false; orbit.lx = e.clientX; orbit.ly = e.clientY;
       try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     });
     cv.addEventListener("pointermove", e => {
+      if (lv) {
+        const dx = e.clientX - lv.lastX;
+        lv.lastX = e.clientX;
+        lv.moved = Math.max(lv.moved, Math.hypot(e.clientX - lv.downX, e.clientY - lv.downY));
+        if (lv.moved > TAP_SLOP / 2) { setFace(S.facing + dx * DEG_PER_PX); e.preventDefault(); }
+        return;
+      }
       if (!orbit.drag) return;
       orbit.yaw -= (e.clientX - orbit.lx) * .007;
       orbit.pitch = Math.min(1.35, Math.max(.28, orbit.pitch + (e.clientY - orbit.ly) * .004));
       orbit.lx = e.clientX; orbit.ly = e.clientY;
     });
-    ["pointerup", "pointercancel"].forEach(ev => cv.addEventListener(ev, () => { orbit.drag = false; }));
+    cv.addEventListener("pointerup", e => {
+      orbit.drag = false;
+      if (!lv) return;
+      if (lv.moved <= TAP_SLOP) {
+        const r = cv.getBoundingClientRect();
+        ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        ray.setFromCamera(ndc, camera);
+        if (ray.ray.intersectPlane(ground, hit)) {
+          const dx = hit.x - S.pos.x, dy = -hit.z - S.pos.y;
+          if (Math.hypot(dx, dy) > 4) setFace(Math.atan2(dx, dy) * 180 / Math.PI);
+        }
+      }
+      lv = null;
+      maybeSnap();
+    });
+    cv.addEventListener("pointercancel", () => { orbit.drag = false; lv = null; });
   }
 
   /* ---------------------------------------------------------------- loop */
@@ -2553,8 +2563,10 @@ const replay = (() => {
     catch (_) { status = "failed"; syncBtn(); return; }
     plan = makePlan();
     buildDynamic();
+    cancelAnimationFrame(liveRaf);               // the replay borrows the canvas
     $("replay").hidden = false;
-    resize();
+    attach($("replay"));
+    dyn.visible = true; liveDyn.visible = false;
     startAt(REDUCED.matches ? plan.total : 0);
     open = true;
     cancelAnimationFrame(raf);
@@ -2566,8 +2578,216 @@ const replay = (() => {
     if (!open) return;
     open = false; cancelAnimationFrame(raf);
     $("replay").hidden = true;
+    if (liveOn) enterLive();                     // and gives it back
     if (returnFocus && !$("replayBtn").hidden) $("replayBtn").focus({ preventScroll: true });
   }
+
+  /* ------------------------------------------------------------ live view
+     The same scene, following the game as you play.
+
+     NORTH IS UP, here too. The camera sits south of the walker looking north
+     and only ever slides along with them; it never turns. Only the walker and
+     the dashed aim line rotate — the same way the baseplate rotates on the
+     compass while the needle holds still. So the compass's travel arrow, the
+     2D map and this view all point the same way on screen. (A camera behind
+     the walker felt more immersive, but it swung the world round every time
+     you turned, and the compass arrow and the 3D path disagreed.)
+
+     Only ever an option on top of the 2D map, which stays the default and the
+     fallback. It's hidden on Expert, when Three.js or WebGL isn't available,
+     and on phones whenever the map is the small thumbnail. */
+  let liveWanted = false, liveOn = false, liveBusy = false, liveRaf = 0, liveLast = 0;
+  let liveDyn, liveRibMat, liveRibs = [], livePrints, liveMarks = null, liveMiss = null, aim, aimMat;
+  // null, not "", so the first frame always builds (an empty key is a real value)
+  let liveKey = null, liveMarkKey = null, liveMissKey = null, renderKey = "";
+  let lastPos = null, liveAlong = 0;
+  let glOK = null;
+  const webglOK = () => (glOK === null ? (glOK = hasWebGL()) : glOK);
+  const MAX_PRINTS = 6 * 11;                       // six legs of ten-ish footprints
+
+  function liveInit() {
+    liveDyn = new T.Group(); liveDyn.visible = false; scene.add(liveDyn);
+    liveRibMat = new T.MeshBasicMaterial({ color: 0x12395c, transparent: true, opacity: .8 });
+    const pg = new T.CircleGeometry(1, 14); pg.rotateX(-Math.PI / 2);
+    livePrints = new T.InstancedMesh(pg,
+      new T.MeshBasicMaterial({ color: 0x4a5f33, transparent: true, opacity: .75 }), MAX_PRINTS * 2);
+    livePrints.count = 0;
+    liveDyn.add(livePrints);
+    // the dashed line ahead of you, like the map's: where the next leg will go.
+    // Red until you're lined up, then green.
+    aim = new T.Group();
+    aimMat = new T.MeshBasicMaterial({ color: 0xce1126, transparent: true, opacity: .75 });
+    const dg = new T.BoxGeometry(.7, .04, 2.4);
+    for (let d = 6; d <= LEG_FT; d += 5) { const m = new T.Mesh(dg, aimMat); m.position.set(0, .1, -d); aim.add(m); }
+    liveDyn.add(aim);
+  }
+
+  /* Trail, footprints, corner numbers and the miss line, rebuilt only when the
+     walk itself changes — turning on the spot touches none of it. */
+  function syncLiveScene() {
+    const pts = S.trail, n = pts.length - 1;
+    const key = pts.map(p => p.x.toFixed(2) + "," + p.y.toFixed(2)).join(";");
+    if (key !== liveKey) {
+      liveKey = key;
+      while (liveRibs.length < n) {
+        const geo = new T.BoxGeometry(.7, .03, 1); geo.translate(0, 0, -.5);
+        const m = new T.Mesh(geo, liveRibMat); liveDyn.add(m); liveRibs.push(m);
+      }
+      liveRibs.forEach((m, i) => {
+        m.visible = i < n;
+        if (i >= n) return;
+        const a = pts[i], b = pts[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y);
+        m.position.copy(W3(a.x, a.y, .05));
+        m.rotation.y = -rad(hdg(b.x - a.x, b.y - a.y));
+        m.scale.z = Math.max(.001, len);
+      });
+      const M = new T.Matrix4(), Q = new T.Quaternion(), up = new T.Vector3(0, 1, 0);
+      const toe = new T.Vector3(.42, 1, .62), heel = new T.Vector3(.32, 1, .42);
+      let k = 0, side = -1;
+      for (let i = 0; i < n && k < MAX_PRINTS; i++) {
+        const a = pts[i], b = pts[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len < .01) continue;
+        const hr = rad(hdg(b.x - a.x, b.y - a.y)), fx = Math.sin(hr), fy = Math.cos(hr);
+        Q.setFromAxisAngle(up, -hr);
+        for (let d = PRINT_FT / 2; d <= len && k < MAX_PRINTS; d += PRINT_FT, k++) {
+          side = -side;
+          const x = a.x + fx * d + fy * 1.1 * side, y = a.y + fy * d - fx * 1.1 * side;
+          M.compose(W3(x + fx * .55, y + fy * .55, .09), Q, toe); livePrints.setMatrixAt(k * 2, M);
+          M.compose(W3(x - fx * .55, y - fy * .55, .09), Q, heel); livePrints.setMatrixAt(k * 2 + 1, M);
+        }
+      }
+      livePrints.count = k * 2;
+      livePrints.instanceMatrix.needsUpdate = true;
+    }
+
+    const mk = pts.slice(1, S.leg + 1).map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(";");
+    if (mk !== liveMarkKey) {
+      liveMarkKey = mk;
+      if (liveMarks) { liveDyn.remove(liveMarks); disposeTree(liveMarks); }
+      liveMarks = new T.Group();
+      for (let i = 1; i <= S.leg && i < pts.length; i++) {
+        const sp = label(String(i), { round: true, h: 5 });
+        sp.position.copy(W3(pts[i].x, pts[i].y, 4.5));
+        liveMarks.add(sp);
+      }
+      liveDyn.add(liveMarks);
+    }
+
+    const missKey = S.finished ? S.pos.x.toFixed(2) + "," + S.pos.y.toFixed(2) : "";
+    if (missKey !== liveMissKey) {
+      liveMissKey = missKey;
+      if (liveMiss) { liveDyn.remove(liveMiss); disposeTree(liveMiss); liveMiss = null; }
+      if (S.finished) { liveMiss = missLine(S.pos); liveDyn.add(liveMiss); }
+    }
+
+    liveMarks.children.forEach((sp, i) => {
+      const c = pts[i + 1];
+      sp.visible = Math.hypot(c.x - S.pos.x, c.y - S.pos.y) > 6;   // not the one you're standing on
+    });
+
+    aim.visible = !S.animating && !S.finished;
+    if (aim.visible) {
+      aim.position.copy(W3(S.pos.x, S.pos.y));
+      aim.rotation.y = -rad(S.facing);
+      aimMat.color.setHex(aligned() ? 0x1e7a3c : 0xce1126);
+    }
+  }
+
+  // Following: a high three-quarter view from the south, walker a little
+  // below centre so there's more room ahead than behind on a northward leg.
+  // Pulled back on narrow screens, which see less side to side.
+  function followGoal() {
+    const k = Math.max(1, 1.1 / camera.aspect);
+    return { pos: W3(S.pos.x, S.pos.y - 34 * k, 40 * k), look: W3(S.pos.x, S.pos.y + 8, 0) };
+  }
+  // Round over: still north-up, pulled back to frame both you and the stick
+  function finishGoal() {
+    const end = S.pos, miss = Math.hypot(end.x, end.y);
+    const cx = end.x / 2, cy = end.y / 2, k = Math.max(1, 1.1 / camera.aspect) * (1 + miss / 60);
+    return { pos: W3(cx, cy - 38 * k, 44 * k), look: W3(cx, cy + 4, 2) };
+  }
+
+  function liveFrame(now) {
+    if (!liveOn || open) return;
+    liveRaf = requestAnimationFrame(liveFrame);
+    const dt = Math.min(.05, Math.max(0, (now - liveLast) / 1000));
+    liveLast = now;
+    syncLiveScene();
+
+    // the walker: where the game says you are, legs swinging only while moving
+    const moved = lastPos ? Math.hypot(S.pos.x - lastPos.x, S.pos.y - lastPos.y) : 0;
+    lastPos = { x: S.pos.x, y: S.pos.y };
+    liveAlong += moved;
+    const walking = S.animating && moved > .001;
+    walker.position.copy(W3(S.pos.x, S.pos.y, walking ? Math.abs(Math.sin(liveAlong * .62)) * .16 : 0));
+    walker.rotation.y = -rad(S.facing);
+    const { L, R, AL, AR } = walker.userData, sw = walking ? Math.sin(liveAlong * .62) * .62 : 0;
+    L.rotation.x = walking ? sw : L.rotation.x * .8;
+    R.rotation.x = walking ? -sw : R.rotation.x * .8;
+    AL.rotation.x = walking ? -sw * .7 : AL.rotation.x * .8;
+    AR.rotation.x = walking ? sw * .7 : AR.rotation.x * .8;
+
+    // The camera only ever slides — it follows your position, never your heading
+    const g = S.finished ? finishGoal() : followGoal();
+    const a = REDUCED.matches ? 1 : 1 - Math.exp(-(S.finished ? 2 : 6) * dt);
+    camPos.lerp(g.pos, a); camLook.lerp(g.look, a);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+
+    // Draw only when something on screen changed. Standing still, lined up,
+    // reading the compass, this costs nothing.
+    // (heading is in here because turning no longer moves the camera)
+    const rk = [camPos.x, camPos.y, camPos.z, camLook.x, camLook.z, L.rotation.x, walker.position.y,
+                walker.rotation.y]
+      .map(v => v.toFixed(3)).join() + liveKey + liveMissKey + aim.visible + aimMat.color.getHex() +
+      liveMarks.children.map(sp => +sp.visible).join("");
+    if (rk !== renderKey) { renderKey = rk; renderer.render(scene, camera); }
+  }
+
+  function enterLive() {
+    attach($("live3d"));
+    dyn.visible = false; liveDyn.visible = true;
+    lastPos = null; renderKey = "";
+    const g = S.finished ? finishGoal() : followGoal();
+    camPos = g.pos.clone(); camLook = g.look.clone();
+    liveLast = performance.now();
+    cancelAnimationFrame(liveRaf);
+    liveRaf = requestAnimationFrame(liveFrame);
+  }
+  function startLive() {
+    if (liveOn) return;
+    liveOn = true;
+    $("live3d").hidden = false;
+    if (!open) enterLive();                    // mid-replay, hide() hands it over
+  }
+  function stopLive() {
+    if (!liveOn) return;
+    liveOn = false;
+    cancelAnimationFrame(liveRaf);
+    $("live3d").hidden = true;
+  }
+
+  function syncLive() {
+    const tg = $("viewToggle");
+    const allowed = S.started && S.preset !== "expert" && status !== "failed" && webglOK() &&
+      (!NARROW.matches || isBig($("vField")));
+    if (tg.hidden === allowed) tg.hidden = !allowed;
+    if (allowed && liveWanted && status === "ready" && renderer) startLive(); else stopLive();
+    setText(tg, liveBusy ? "Loading…" : liveOn ? "Map view" : "3D view");
+    if (tg.disabled !== liveBusy) tg.disabled = liveBusy;
+  }
+
+  $("viewToggle").addEventListener("click", async e => {
+    e.stopPropagation();                       // the view's own click swaps views on phones
+    if (liveBusy) return;
+    liveWanted = !liveWanted;
+    if (liveWanted && (status !== "ready" || !renderer)) {
+      liveBusy = true; syncLive();
+      try { await load(); if (!renderer) build(); }
+      catch (_) { liveWanted = false; status = "failed"; }
+      liveBusy = false;
+    }
+    syncLive();
+  });
 
   $("replayBtn").addEventListener("click", show);
   ["replayClose", "replayDone"].forEach(id => $(id).addEventListener("click", () => hide()));
