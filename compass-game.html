@@ -412,6 +412,21 @@
   .viewToggle{position:absolute;top:8px;left:8px;z-index:4;min-height:34px;padding:0 12px;
     font-size:.85rem;background:rgba(255,255,255,.95);border-color:var(--line)}
   .viewToggle:hover:not(:disabled){background:#eaf1f7}
+  /* the compass view's shortcut to the labelled diagram; no room for it on a thumbnail */
+  .view.small #partsBtn{display:none}
+
+  /* ---------------- help pictures (copies of the live compass) ---------------- */
+  .pic text{font-family:var(--ui)}
+  .partsPic svg{display:block;width:100%;max-width:330px;height:auto;margin:0 auto 8px}
+  .modalInner .partsList{list-style:none;padding:0;margin:0 0 6px;display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 18px}
+  .partsList li{display:flex;gap:9px;align-items:flex-start;font-size:.9rem;line-height:1.4;margin:0 0 4px}
+  .pn{flex:0 0 22px;height:22px;border-radius:99px;background:var(--gold);color:var(--navy);
+    font-weight:800;font-size:.78rem;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .shedPics{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:4px 0 6px}
+  .shedPics figure{margin:0;text-align:center}
+  .shedPics svg{display:block;width:100%;max-width:170px;height:auto;margin:0 auto}
+  .shedPics figcaption{font-size:.86rem;line-height:1.4;color:var(--ink)}
   @media (max-width:560px){
     .replayBar{flex-wrap:nowrap;gap:6px;padding:8px}
     .replayBar button{flex:1 1 0;min-width:0;min-height:36px;padding:0 6px;font-size:.8rem}
@@ -575,6 +590,7 @@
     <!-- ============ STAGE ============ -->
     <div class="stage" id="stage">
       <div class="view v-compass" id="vCompass">
+        <button class="viewToggle" id="partsBtn" type="button" aria-haspopup="dialog">Compass parts</button>
         <svg id="compass" viewBox="-125 -125 250 250" role="img"
              aria-label="Baseplate compass seen from above. North stays fixed at the top of the screen; the compass turns as you turn."></svg>
       </div>
@@ -669,12 +685,35 @@
     <p class="lead"><b>The goal:</b> walk three legs of 100 feet and end up back at the stick
       where you started.</p>
 
+    <h3 id="partsHead">Parts of a compass</h3>
+    <div class="partsPic" id="partsPic"></div>
+    <ol class="partsList">
+      <li><span class="pn" aria-hidden="true">1</span><span><b>Direction-of-travel arrow.</b> Points the way you'll walk. Hold it straight out in front of you.</span></li>
+      <li><span class="pn" aria-hidden="true">2</span><span><b>Baseplate.</b> The clear plastic base. Turn it and you turn with it.</span></li>
+      <li><span class="pn" aria-hidden="true">3</span><span><b>Scales.</b> Rulers along the edges, for measuring distances on a map.</span></li>
+      <li><span class="pn" aria-hidden="true">4</span><span><b>Compass housing.</b> The round part that turns. Twist it to set your bearing.</span></li>
+      <li><span class="pn" aria-hidden="true">5</span><span><b>Degree markings.</b> The numbers around the housing, 0 to 360. Read your bearing where the direction-of-travel arrow meets them.</span></li>
+      <li><span class="pn" aria-hidden="true">6</span><span><b>Orienting arrow.</b> The outlined arrow inside the housing. It turns with the housing. Scouts call it the &ldquo;shed.&rdquo;</span></li>
+      <li><span class="pn" aria-hidden="true">7</span><span><b>Orienting lines.</b> Lines beside the orienting arrow. On a map, you line them up with north.</span></li>
+      <li><span class="pn" aria-hidden="true">8</span><span><b>Magnetic needle.</b> Always points north. Its red end is the &ldquo;red&rdquo; in &ldquo;red in the shed.&rdquo;</span></li>
+    </ol>
+
     <h3>Every leg is three steps</h3>
     <ol class="helpSteps">
-      <li><b>Set dial.</b> Turn the numbered ring to your bearing, then press <b>Next</b>.</li>
-      <li><b>Turn.</b> Turn yourself until the red needle sits inside the red shed.</li>
+      <li><b>Set dial.</b> Twist the compass housing until your bearing lines up with the
+        direction-of-travel arrow, then press <b>Next</b>.</li>
+      <li><b>Turn.</b> Turn the whole compass until &ldquo;red is in the shed&rdquo; (see below).</li>
       <li><b>Walk.</b> The big button turns green. Press it.</li>
     </ol>
+
+    <h3>What&rsquo;s &ldquo;red in the shed&rdquo;?</h3>
+    <p>It means the <b>red end of the magnetic needle</b> sits inside the <b>orienting arrow</b>.
+      The needle always points north, so when it lines up with the orienting arrow, the
+      direction-of-travel arrow points along your bearing.</p>
+    <div class="shedPics">
+      <figure><div id="shedNo"></div><figcaption><b>Not yet.</b> The red needle is outside the arrow. Keep turning.</figcaption></figure>
+      <figure><div id="shedYes"></div><figcaption><b>Red in the shed!</b> The needle is inside the arrow, and it lights up. Now walk.</figcaption></figure>
+    </div>
 
     <h3>Which bearing?</h3>
     <ul>
@@ -686,7 +725,7 @@
 
     <h3>Ways to turn</h3>
     <ul>
-      <li>Twist the <b>numbered ring</b> to set the dial.</li>
+      <li>Twist the <b>compass housing</b> (the numbered ring) to set the dial.</li>
       <li>Twist the <b>clear baseplate</b>, or swipe the map, to turn yourself.</li>
       <li>Or use the <b>arrow buttons</b>.</li>
       <li>Press <b>3D view</b> on the map to see the field in 3D. North is still at the top.</li>
@@ -1132,7 +1171,8 @@ function buildCompass() {
   // "red in the shed" literal, and it leaves room for the fill to show through.
   orientArrow = el("path", {
     d: `M 0,${-C.orientTip} L 14,-21 L 8.5,-21 L 8.5,28 L -8.5,28 L -8.5,-21 L -14,-21 Z`,
-    fill: "none", stroke: "#ce1126", "stroke-width": 2.4, "stroke-linejoin": "round" });
+    fill: "none", stroke: "#ce1126", "stroke-width": 2.4, "stroke-linejoin": "round",
+    class: "orientArrow" });
   gHousing.appendChild(orientArrow);
   // stroke-opacity, not opacity: group opacity would make the renderer composite
   // this through an offscreen layer on every rotation frame. Stroke-only content,
@@ -1183,6 +1223,64 @@ function drawCompass() {
   setAttr(orientArrow, "fill", ok ? "#f2a900" : "none");
   setAttr(orientArrow, "fill-opacity", ok ? ".45" : "0");
   setAttr(orientArrow, "stroke-width", ok ? 3.6 : 2.4);
+}
+
+/* ============================================================================
+   HELP PICTURES
+   Built by copying the live compass, so the help screen always shows exactly
+   the compass the player is holding — change the drawing and these follow.
+   ============================================================================ */
+function compassPicture(facing, dial, lit) {
+  const svg = cSvg.cloneNode(true);
+  svg.removeAttribute("id");
+  svg.setAttribute("class", "pic");
+  svg.setAttribute("aria-hidden", "true");
+  const surf = svg.querySelector(".compassSurface");
+  if (surf) surf.remove();
+  svg.querySelector(".plate").setAttribute("transform", `rotate(${facing})`);
+  svg.querySelector(".housing").setAttribute("transform", `rotate(${-dial})`);
+  const oa = svg.querySelector(".orientArrow");
+  oa.setAttribute("fill", lit ? "#f2a900" : "none");
+  oa.setAttribute("fill-opacity", lit ? ".45" : "0");
+  oa.setAttribute("stroke-width", lit ? 3.6 : 2.4);
+  return svg;
+}
+function buildHelpPictures() {
+  // Parts: compass upright and lined up, with numbered call-outs round the edge.
+  // [dot x, dot y, target x, target y] in compass units; numbers match the list.
+  const P = compassPicture(0, 0, false);
+  P.setAttribute("viewBox", "-140 -128 280 250");
+  P.setAttribute("role", "img");
+  P.removeAttribute("aria-hidden");
+  P.setAttribute("aria-label", "A baseplate compass with its eight parts numbered, as listed below.");
+  const CALLOUTS = [
+    [0, -115, 0, -88],        // 1 direction-of-travel arrow
+    [118, 72, 70, 78],        // 2 baseplate
+    [-120, 45, -76, 45],      // 3 scales
+    [-120, -88, -48, -48],    // 4 compass housing
+    [118, -72, 40, -40],      // 5 degree markings
+    [118, -12, 9, -8],        // 6 orienting arrow
+    [-120, 0, -18, 4],        // 7 orienting lines
+    [-120, -44, -3, -20]      // 8 magnetic needle
+  ];
+  const g = el("g");
+  CALLOUTS.forEach(([dx, dy, tx, ty], i) => {
+    g.appendChild(el("line", { x1: dx, y1: dy, x2: tx, y2: ty, stroke: "#fff", "stroke-width": 3.2, "stroke-linecap": "round" }));
+    g.appendChild(el("line", { x1: dx, y1: dy, x2: tx, y2: ty, stroke: "#12395c", "stroke-width": 1.2 }));
+    g.appendChild(el("circle", { cx: tx, cy: ty, r: 2.2, fill: "#12395c" }));
+  });
+  CALLOUTS.forEach(([dx, dy], i) => {
+    g.appendChild(el("circle", { cx: dx, cy: dy, r: 10, fill: "#f2a900", stroke: "#12395c", "stroke-width": 1.5 }));
+    const t = el("text", { x: dx, y: dy, "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": "11", "font-weight": "800", fill: "#12395c" });
+    t.textContent = String(i + 1);
+    g.appendChild(t);
+  });
+  P.appendChild(g);
+  $("partsPic").appendChild(P);
+  // Red in the shed: the same bearing (35°), turned wrong and turned right
+  $("shedNo").appendChild(compassPicture(0, 35, false));
+  $("shedYes").appendChild(compassPicture(35, 35, true));
 }
 
 /* ============================================================================
@@ -1468,7 +1566,9 @@ const STEP_INDEX = { dial: 0, turn: 1, walk: 2, wait: 2, done: 3 };
 function sayFor(ph) {
   if (ph === "done") return "";
   if (ph === "wait") return "Walking…";
-  if (ph === "turn") return "Turn the entire compass until “red is in the shed”";
+  if (ph === "turn") return "Turn the entire compass until “red is in the shed”" +
+    (S.preset === "beginner"
+      ? "<small>Line up the red end of the magnetic needle inside the orienting arrow.</small>" : "");
   if (ph === "walk") return "Red is in the shed. Walk!";
   if (S.leg === 0) return "Pick any bearing to start by turning the dial";
   const prev = S.used[S.leg - 1], exps = expectedBearings(), dir = turnDir();
@@ -2055,6 +2155,11 @@ const openModal = m => {
   m.scrollIntoView({ block: "nearest" });
 };
 const closeModal = m => { if (m.close) m.close(); else m.removeAttribute("open"); };
+$("partsBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  openModal($("helpModal"));
+  $("partsHead").scrollIntoView({ block: "start" });
+});
 document.querySelectorAll("[data-close]").forEach(b =>
   b.addEventListener("click", () => closeModal(b.closest("dialog"))));
 [["helpBtn", "helpModal"], ["settingsBtn", "settingsModal"], ["badgeBtn", "badgeModal"],
@@ -2942,6 +3047,7 @@ const replay = (() => {
 Object.assign(S, pick(PRESETS.beginner));   // everyone starts on Beginner...
 loadSaved();                                // ...unless a saved visit says otherwise
 buildCompass();
+buildHelpPictures();
 buildField();
 applyLayout();
 $("coverCompass").appendChild(cSvg);        // the cover borrows the live compass
